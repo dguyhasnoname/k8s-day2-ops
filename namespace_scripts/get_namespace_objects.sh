@@ -1,13 +1,10 @@
 #!/bin/bash -e
-#######################################################################
-# This script greps for case-insentitive 'error' string in a pod over #
-# the last 5 minutes. It can optionally add additional param like     #
-# '10m' or '24h' to change the --TIME= value. Default ns is kube-     #
-# system. This script needs KUBECONFIG to be exported prior to run it.#
-# Author: Mukund                                                      #
-# Date: 15th August 2019                                              #
-# Version: 1.0                                                        #
-#######################################################################
+########################################################################
+# This script finds all object types in a namespace and then list them #
+# Author: Mukund                                                       #
+# Date: 15th August 2019                                               #
+# Version: 1.0                                                         #
+########################################################################
 
 NAMESPACE="$1"
 FLAG="$2"
