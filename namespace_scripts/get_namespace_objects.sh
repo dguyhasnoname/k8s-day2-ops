@@ -10,6 +10,7 @@ NAMESPACE="$1"
 FLAG="$2"
 
 usage() {
+    echo "[WARNING]: Export KUBECONFIG before running the script."
     echo "Usage: "
     echo "./get_namespace_objects.sh -h/-help/--h           help"
     echo "./get_namespace_objects.sh <namespace>            checks limited api-resources in a namespace"
@@ -17,6 +18,7 @@ usage() {
     exit
 }
 
+#Validates namespace name
 check_namespace() {
     echo "Validating namespace $NAMESPACE ..."
     kubectl get ns/"$NAMESPACE" && echo -en "\033[0;32mNamespace $NAMESPACE found.\033[0m" && echo -n " Fetching objects in namespace $NAMESPACE..."
@@ -26,6 +28,7 @@ separator() {
     printf '\n%s\n' " "
 }
 
+#list resources for a object type like pods, secrets etc.
 fetch_list() {
     OUTPUT="$(kubectl -n "$NAMESPACE" get --ignore-not-found "$object")"
     if [[ "$OUTPUT" != "" ]];
@@ -38,6 +41,7 @@ fetch_list() {
     fi
 }
 
+#get helm deployments
 get_helm_deployments () {
     echo -e "\033[0;32mHelm releases found in $NAMESPACE: \033[0m"
     printf "%-30s %-15s %-15s\n" RELEASE_NAME STATUS DATE
@@ -45,6 +49,7 @@ get_helm_deployments () {
     separator
 }
 
+#gets the list of resources for few important objects
 get_objects() {
     [ -z "$NAMESPACE" ]  && usage
     check_namespace
@@ -61,6 +66,7 @@ get_objects() {
     separator
 }
 
+#gets the list of resources for all objects and lists helm deployments too.
 get_all_objects() {
     for object in $(kubectl api-resources --verbs=list --namespaced -o name | grep -v "events.events.k8s.io" | grep -v "events" | sort | uniq); 
     do
