@@ -13,8 +13,9 @@ NAMESPACE="${2:-kube-system}"
 usage() {
     echo "****Export KUBECONFIG before running the script.***"
     echo "Usage: "
-    echo "./multiple_pod_delete.sh -h/-help/--h         help"
-    echo "./multiple_pod_delete.sh <namespace>          deletes multiple pods which contains given string"
+    echo "./multiple_pod_delete.sh -h/-help/--h                 help"
+    echo "./multiple_pod_delete.sh string <namespace>           deletes multiple pods which contains given string"
+    echo "./multiple_pod_delete.sh kube-proxy kube-system"
     exit
 }
 
@@ -56,6 +57,7 @@ delete_pods() {
         kubectl get pods --no-headers -n "$NAMESPACE" | grep -i "$STRING"
     else
         echo "Did not get input to delete pods."
+        kubectl get pods --no-headers -n "$NAMESPACE" | grep -i "$STRING"
         echo "Exiting script!"
     fi
     separator
