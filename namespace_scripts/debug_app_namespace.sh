@@ -6,7 +6,7 @@
 # Version: 1.0                                                           #
 ##########################################################################
 
-
+START_TIME=$(date +%s)
 NAMESPACE=${1:-kube-system}
 FLAG="$2"
 
@@ -94,9 +94,12 @@ cvr_check () {
 
 peristent_storage () {
     COUNT=0
-    PVC_LIST="$(kubectl get pvc -n "$NAMESPACE"  --no-headers)"
+    PVC_LIST="$(kubectl get pvc -n "$NAMESPACE"  --no-headers 2> /dev/null)"
     #loop  over pvc
-    [ "$PVC_LIST" == "" ] && exit
+    if [[ "$PVC_LIST" == "" ]];then
+        echo -e "\033[0;33mPersistent storage not configured\033[0m for namespace $NAMESPACE."
+        exit
+    fi
     while read -r line;
     do
         separator
@@ -165,20 +168,28 @@ pod_container_restart () {
         CONTAINER_JSON="$(echo "$POD_JSON" | jq  -rj '.status.containerStatuses[] | select (.name == "'$line'") | .lastState.terminated |  select(. != null) | .reason, " ", .exitCode, " ", .startedAt, " ", .finishedAt, "\n"')"
         if [[ "$CONTAINER_JSON" != "" && $(echo "$CONTAINER_JSON" | awk '{print $1}') != "Completed" ]];
         then
-            echo -e "\033[0;31m$line\033[0m" | sed "s/^/                  /"
-            echo "$CONTAINER_JSON" | awk '{printf "%-10s %-5s %-25s %-25s\n", $1, $2, $3, $4}' | sed "s/^/                  /"
+            echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
+            echo "$CONTAINER_JSON" | awk '{printf "\033[1;31m%-10s\033[0m %-5s %-25s %-25s\n", $1, $2, $3, $4}' | sed "s/^/                /"
         fi
     done <<< "$RESTARTED_CONTAINER_LIST"
+    separator
 }
 
-pod_state () {
+pod_state_crashloopbackoff () {
     POD_STATE_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status.containerStatuses')"
     POD_STATE_CONTAINER_LIST="$(echo "$POD_STATE_JSON" | jq -r  '.[].name')"
     while read -r line;
     do
         POD_STATE_CONTAINER_JSON="$(echo "$POD_STATE_JSON" | jq  -r '.[] | select (.name == "'$line'") | .state')"
-        echo -e "\033[0;31m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
+        echo -e "Reason of failure:" | sed "s/^/                /"
+        echo -e "\033[0;33m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
+        pod_container_restart
     done <<< "$POD_STATE_CONTAINER_LIST"
+}
+
+pod_state_evicted () {
+    POD_STATE_EVICT_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status')"
+    echo -e "\033[0;31m$POD_STATE_EVICT_JSON\033[0m" | sed "s/^/                /"
 }
 
 pods () {
@@ -192,29 +203,46 @@ pods () {
         POD_NAME="$(echo "$line" | awk '{print $1}')"
         POD_AGE="$(echo "$line" | awk '{print $5}')"
         POD_NODE="$(echo "$line" | awk '{print $7}')"
-        if [[ "$STATUS" =~ ^(Running|Completed)$ ]];
+        RESTART="$(echo "$line" | awk '{print $4}')"
+
+        if [[ "$STATUS" == "CrashLoopBackOff" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_crashloopbackoff
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" == "Evicted" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_evicted
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" == "Completed" ]];
+        then
+            verbose && echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+        fi
+        if [[ "$STATUS" == "CreateContainerConfigError" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_crashloopbackoff
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" == "Running" ]];
         then
             CONTAINERS_RUNNING="$(echo "$line" | awk '{print $2}')"
-            if [[ "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $1}')" !=  "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $2}')" ]];
+            if [[ "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $1}')" ==  "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $2}')" ]];
             then
-                [ "$STATUS" != "Completed" ] && echo -e "\033[0;31mAll containers running in pod $POD_NODE/$POD_NAME is not running.\033[0m" \
-                || echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NAME" "$POD_NODE"
-                COUNT=$((COUNT+1))
+                verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NAME" "$POD_NODE"
             else
-                RESTART="$(echo "$line" | awk '{print $4}')"
                 if [[ "$RESTART" -gt 0 ]];
                 then
-                    echo -e "\033[1;33m! [WARNING] pod\033[0m" "$POD_NODE"/"$POD_NAME" "$POD_AGE" old have containers with restart count: "$RESTART"
+                    echo -e "\033[1;33m! [WARNING] pod\033[0m" "$POD_NODE"/"$POD_NAME" is "\033[1;32mRunning\033[0m" since "$POD_AGE", having containers restarted.
                     COUNT=$((COUNT+1))
                     pod_container_restart
                 else
                     verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NAME" "$POD_NODE"
                 fi
             fi
-        else
-            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
-            pod_state
-            COUNT=$((COUNT+1))
         fi
     done <<< "$POD_LIST"
     [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of pods. \
@@ -229,9 +257,13 @@ debug_ns() {
     echo -e "\033[0;32mCrawling objects in namespace $NAMESPACE:\033[0m"
     echo "-------------------------------------------------------------"
     pods
-    #peristent_storage
+    peristent_storage
     separator
 }
 
 [[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
 debug_ns
+
+END_TIME=$(date +%s)
+EXECUTION_TIME=$((END_TIME-START_TIME))
+echo Total time taken: "$EXECUTION_TIME"s
