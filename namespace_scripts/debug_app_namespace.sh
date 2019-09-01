@@ -98,7 +98,7 @@ peristent_storage () {
     #loop  over pvc
     if [[ "$PVC_LIST" == "" ]];then
         echo -e "\033[0;33mPersistent storage not configured\033[0m for namespace $NAMESPACE."
-        exit
+        return
     fi
     while read -r line;
     do
@@ -170,6 +170,9 @@ pod_container_restart () {
         then
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
             echo "$CONTAINER_JSON" | awk '{printf "\033[1;31m%-10s\033[0m %-5s %-25s %-25s\n", $1, $2, $3, $4}' | sed "s/^/                /"
+        else
+            echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
+            echo -e "Container $line was last terminated with exitCode: \033[0;32m0\033[0m and reason: \033[0;32mCompleted\033[0m " | sed "s/^/                /"  
         fi
     done <<< "$RESTARTED_CONTAINER_LIST"
     separator
@@ -189,6 +192,7 @@ pod_state_crashloopbackoff () {
 
 pod_state_evicted () {
     POD_STATE_EVICT_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status')"
+    echo -e "Reason of eviction:" | sed "s/^/                /"
     echo -e "\033[0;31m$POD_STATE_EVICT_JSON\033[0m" | sed "s/^/                /"
 }
 
@@ -196,7 +200,14 @@ pods () {
     COUNT=0
     echo -e "\033[0;32mPod details:\033[0m"
     separator
-    POD_LIST="$(kubectl get pods -o wide --no-headers -n "$NAMESPACE")"
+    POD_LIST="$(kubectl get pods -o wide --no-headers -n "$NAMESPACE" 2> /dev/null)"
+    if [[ "$POD_LIST" == "" ]];then
+        echo -e "\033[1;33m! [WARNING]    \033[0m 0 pods running in namespace $NAMESPACE."
+        return
+    else
+        POD_COUNT="$(echo "$POD_LIST" | wc -l)"
+        echo -e "\033[1;32m\xE2\x9C\x94           pods found:$POD_COUNT\033[0m"
+    fi
     while read -r line;
     do
         STATUS="$(echo "$line" | awk '{print $3}')"
