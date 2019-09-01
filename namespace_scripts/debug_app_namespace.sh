@@ -260,6 +260,33 @@ pods () {
     || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for pods!
 }
 
+rs () {
+    COUNT=0
+    echo -e "\033[0;32mReplicaSet details:\033[0m"
+    separator
+    RS_LIST="$(kubectl get rs -n $NAMESPACE --no-headers | awk '{if($2!=0) print}' 2> /dev/null)"
+    if [[ "$RS_LIST" == "" ]];
+    then
+        echo -e "\033[1;33m! [WARNING]    \033[0m 0 replicasets running in namespace $NAMESPACE."
+        return
+    else
+        RS_COUNT="$(echo "$RS_LIST" | wc -l)"
+        echo -e "\033[1;32m\xE2\x9C\x94           replicaset found:$RS_COUNT\033[0m"
+    fi
+    while read -r line;
+    do
+        if [[ "$(echo "$line" | awk '{print $2}')" != "$(echo "$line" | awk '{print $4}')" ]];
+        then
+            echo -e "\033[1;33m! [WARNING] replicaset\033[0m" "$line"
+            COUNT=$((COUNT+1))
+        else
+            echo -e "\033[1;32m\xE2\x9C\x94 [OK]      replicaset\033[0m" "$line"
+        fi
+    done <<< "$RS_LIST"
+    [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of replicasets. \
+    || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for replicasets!
+    separator
+}
 debug_ns() {
     [ "$KUBECONFIG" == "" ] && echo "Please set KUBECONFIG for the cluster." && exit
     check_namespace
@@ -267,6 +294,7 @@ debug_ns() {
     echo "-------------------------------------------------------------"
     echo -e "\033[0;32mCrawling objects in namespace $NAMESPACE:\033[0m"
     echo "-------------------------------------------------------------"
+    rs
     pods
     peristent_storage
     separator
