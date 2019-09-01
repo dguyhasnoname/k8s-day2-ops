@@ -280,7 +280,7 @@ rs () {
             echo -e "\033[1;33m! [WARNING] replicaset\033[0m" "$line"
             COUNT=$((COUNT+1))
         else
-            echo -e "\033[1;32m\xE2\x9C\x94 [OK]      replicaset\033[0m" "$line"
+            verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      replicaset\033[0m" "$line"
         fi
     done <<< "$RS_LIST"
     [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of replicasets. \
