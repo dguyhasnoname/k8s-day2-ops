@@ -171,6 +171,16 @@ pod_container_restart () {
     done <<< "$RESTARTED_CONTAINER_LIST"
 }
 
+pod_state () {
+    POD_STATE_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status.containerStatuses')"
+    POD_STATE_CONTAINER_LIST="$(echo "$POD_STATE_JSON" | jq -r  '.[].name')"
+    while read -r line;
+    do
+        POD_STATE_CONTAINER_JSON="$(echo "$POD_STATE_JSON" | jq  -r '.[] | select (.name == "'$line'") | .state')"
+        echo -e "\033[0;31m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
+    done <<< "$POD_STATE_CONTAINER_LIST"
+}
+
 pods () {
     COUNT=0
     echo -e "\033[0;32mPod details:\033[0m"
@@ -179,11 +189,11 @@ pods () {
     while read -r line;
     do
         STATUS="$(echo "$line" | awk '{print $3}')"
+        POD_NAME="$(echo "$line" | awk '{print $1}')"
+        POD_AGE="$(echo "$line" | awk '{print $5}')"
+        POD_NODE="$(echo "$line" | awk '{print $7}')"
         if [[ "$STATUS" =~ ^(Running|Completed)$ ]];
         then
-            POD_NAME="$(echo "$line" | awk '{print $1}')"
-            POD_AGE="$(echo "$line" | awk '{print $5}')"
-            POD_NODE="$(echo "$line" | awk '{print $7}')"
             CONTAINERS_RUNNING="$(echo "$line" | awk '{print $2}')"
             if [[ "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $1}')" !=  "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $2}')" ]];
             then
@@ -203,6 +213,7 @@ pods () {
             fi
         else
             echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state
             COUNT=$((COUNT+1))
         fi
     done <<< "$POD_LIST"
@@ -218,7 +229,7 @@ debug_ns() {
     echo -e "\033[0;32mCrawling objects in namespace $NAMESPACE:\033[0m"
     echo "-------------------------------------------------------------"
     pods
-    peristent_storage
+    #peristent_storage
     separator
 }
 
