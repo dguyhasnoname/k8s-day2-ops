@@ -175,6 +175,7 @@ pod_container_restart () {
                 kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry" | tail -3 | sed "s/^/                /"
             }
             verbose && get_event
+            COUNT=$((COUNT+1))
         else
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
             echo -e "Container $line was last terminated with exitCode: \033[0;32m0\033[0m and reason: \033[0;32mCompleted\033[0m " | sed "s/^/                /"
@@ -189,33 +190,36 @@ pod_state_crashloopbackoff () {
     while read -r line;
     do
         POD_STATE_CONTAINER_JSON="$(echo "$POD_STATE_JSON" | jq  -r '.[] | select (.name == "'$line'") | .state')"
-        echo -e "Reason of failure:" | sed "s/^/                /"
-        echo -e "\033[0;33m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
         pod_container_restart
+        if ! verbose;
+        then
+            echo -e "Status found in kubectl get -o json pod $POD_NAME -n $NAMESPACE:" | sed "s/^/                /"
+            echo -e "\033[0;33m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
+        fi
     done <<< "$POD_STATE_CONTAINER_LIST"
 }
 
 pod_state_evicted () {
     POD_STATE_EVICT_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status')"
-    echo -e "Reason of eviction:" | sed "s/^/                /"
+    echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
     echo -e "\033[0;31m$POD_STATE_EVICT_JSON\033[0m" | sed "s/^/                /"
 }
 
 pod_state_pending () {
     POD_STATE_PENDING_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status')"
-    echo -e "Reason of pending pod:" | sed "s/^/                /"
+    echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
     echo -e "\033[0;31m$POD_STATE_PENDING_JSON\033[0m" | sed "s/^/                /"
 }
 
 pod_state_init () {
     POD_STATE_INIT_JSON="$(kubectl get event -n "$NAMESPACE" --field-selector involvedObject.name="$POD_NAME")"
-    echo -e "Reason of "$STATUS" pod status:" | sed "s/^/                /"
+    echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
     echo -e "\033[0;31m$POD_STATE_INIT_JSON\033[0m" | sed "s/^/                /"
 }
 
 pod_state_imagepullbackoff () {
     POD_STATE_IMAGEPULLBAKCOFF_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status.containerStatuses[].state')"
-    echo -e "Reason of ImagePullBackOff pod:" | sed "s/^/                /"
+    echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
     echo -e "\033[0;31m$POD_STATE_IMAGEPULLBAKCOFF_JSON\033[0m" | sed "s/^/                /"
 }
 
@@ -289,7 +293,6 @@ pods () {
                 if [[ "$RESTART" -gt 0 ]];
                 then
                     echo -e "\033[1;33m! [WARNING] pod\033[0m" "$POD_NODE"/"$POD_NAME" is "\033[1;32mRunning\033[0m" since "$POD_AGE", having containers restarted.
-                    COUNT=$((COUNT+1))
                     pod_container_restart
                 else
                     verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NAME" "$POD_NODE"
