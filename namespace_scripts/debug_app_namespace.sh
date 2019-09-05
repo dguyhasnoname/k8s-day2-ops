@@ -196,6 +196,24 @@ pod_state_evicted () {
     echo -e "\033[0;31m$POD_STATE_EVICT_JSON\033[0m" | sed "s/^/                /"
 }
 
+pod_state_pending () {
+    POD_STATE_PENDING_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status')"
+    echo -e "Reason of pending pod:" | sed "s/^/                /"
+    echo -e "\033[0;31m$POD_STATE_PENDING_JSON\033[0m" | sed "s/^/                /"
+}
+
+pod_state_init () {
+    POD_STATE_INIT_JSON="$(kubectl get event -n "$NAMESPACE" --field-selector involvedObject.name="$POD_NAME")"
+    echo -e "Reason of "$STATUS" pod status:" | sed "s/^/                /"
+    echo -e "\033[0;31m$POD_STATE_INIT_JSON\033[0m" | sed "s/^/                /"
+}
+
+pod_state_imagepullbackoff () {
+    POD_STATE_IMAGEPULLBAKCOFF_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status.containerStatuses[].state')"
+    echo -e "Reason of ImagePullBackOff pod:" | sed "s/^/                /"
+    echo -e "\033[0;31m$POD_STATE_IMAGEPULLBAKCOFF_JSON\033[0m" | sed "s/^/                /"
+}
+
 pods () {
     COUNT=0
     echo -e "\033[0;32mPod details:\033[0m"
@@ -236,6 +254,24 @@ pods () {
         then
             echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
             pod_state_crashloopbackoff
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" =~ "Init" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_init
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" == "ImagePullBackOff" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_imagepullbackoff
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" == "Pending" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_pending
             COUNT=$((COUNT+1))
         fi
         if [[ "$STATUS" == "Running" ]];
