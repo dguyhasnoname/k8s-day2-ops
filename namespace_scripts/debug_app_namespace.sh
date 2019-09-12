@@ -170,11 +170,12 @@ pod_container_restart () {
         then
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
             echo "$CONTAINER_JSON" | awk '{printf "\033[1;31m%-10s\033[0m %-5s %-25s %-25s\n", $1, $2, $3, $4}' | sed "s/^/                /"
+            separator
             get_event () {
                 separator
                 kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry" | tail -3 | sed "s/^/                /"
             }
-            verbose && get_event
+            verbose && get_event || echo "Run command  with '-v' flag to get more details.." | sed "s/^/                /"
             COUNT=$((COUNT+1))
         else
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
@@ -195,6 +196,7 @@ pod_state_crashloopbackoff () {
         then
             echo -e "Status found in kubectl get -o json pod $POD_NAME -n $NAMESPACE:" | sed "s/^/                /"
             echo -e "\033[0;33m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
+            echo -e "run script with '-v' flag to get more details.." | sed "s/^/                /"
         fi
     done <<< "$POD_STATE_CONTAINER_LIST"
 }
