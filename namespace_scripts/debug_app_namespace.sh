@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 ##########################################################################
 # This script finds all possible issues in namespace.                    #
 # Author: Mukund                                                         #
@@ -173,9 +173,9 @@ pod_container_restart () {
             separator
             get_event () {
                 separator
-                kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry" | tail -3 | sed "s/^/                /"
+                kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry\|unexpected\|denied" | tail -3 | sed "s/^/                /"
             }
-            verbose && get_event || echo "Run command  with '-v' flag to get more details.." | sed "s/^/                /"
+            verbose && get_event || echo "Run script  with '-v' flag to get more details.." | sed "s/^/                /"
             COUNT=$((COUNT+1))
         else
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
@@ -274,6 +274,12 @@ pods () {
             COUNT=$((COUNT+1))
         fi
         if [[ "$STATUS" == "ImagePullBackOff" ]];
+        then
+            echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            pod_state_imagepullbackoff
+            COUNT=$((COUNT+1))
+        fi
+        if [[ "$STATUS" == "InvalidImageName" ]];
         then
             echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
             pod_state_imagepullbackoff
