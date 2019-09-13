@@ -27,10 +27,21 @@ usage() {
     exit
 }
 
+message () {
+    OBJECT="$1"
+    if  [ "$COUNT" == "0" ];
+    then
+        echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found for $OBJECT.
+    else
+        echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for $OBJECT!
+    fi
+}
+
 check_namespace() {
     echo "Validating namespace $NAMESPACE ..."
-    kubectl get ns/"$NAMESPACE" && echo -en "\033[0;32mNamespace $NAMESPACE found.\033[0m" && echo " Fetching objects in namespace $NAMESPACE..."
-    [ ! $? -eq 0 ] && echo -e "\033[1;31m[ERROR]\033[0m" Namespace "$NAMESPACE" was not found! Please provide correct namespace. && exit
+    NS_VALIDATION="$(kubectl get ns/"$NAMESPACE")"
+    [ "$NS_VALIDATION" != "" ] && echo -en "\033[0;32mNamespace $NAMESPACE found.\033[0m" && echo " Fetching objects in namespace $NAMESPACE..."
+    [ "$NS_VALIDATION" == "" ] && echo -e "\033[1;31m[ERROR]\033[0m" Namespace "$NAMESPACE" was not found! Please provide correct namespace. && exit
 }
 
 pvc_check () {
@@ -39,11 +50,9 @@ pvc_check () {
         echo -e "\033[1;33m! [WARNING] pvc\033[0m" "$line"
         COUNT=$((COUNT+1))
     else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      \033[0m" "$line"
+        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pvc\033[0m" "$PVC_NAME"
     fi
-
-    [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94            \033[0m"no issues found for pvc "$PVC_NAME". \
-    || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for pvc "$PVC_NAME".
+    message pvc
 }
 
 pv_check () {
@@ -52,112 +61,134 @@ pv_check () {
         echo -e "\033[1;33m! [WARNING] pv\033[0m" "$line"
         COUNT=$((COUNT+1))
     else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]    pv\033[0m" "$line"
+        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pv\033[0m" "$line"
     fi
+    message pv
 }
 
 csp_check () {
-    STATUS="$(echo "$line" | awk '{print $5}')"
-    OUTPUT="$(echo "$line" | awk '{printf "%-10s %-5s %-5s %-5s %-10s %-10s %-10s\n", $1, $2, $3, $4, $5, $6, $7}')"
-    if [[ "$STATUS" != "Healthy" ]];
+    csp_stats () {
+        kubectl get csp -o json | jq -r '.items[] | select(.metadata.name | contains("'$CSP_NAME'")) | .metadata.labels."kubernetes.io\/hostname", .status.capacity' | sed 's/^/            /'
+    }
+    CSP_LIST="$(kubectl get csp -o json | jq -r '.items[].metadata.name')"
+    if [[ "$CSP_LIST" != "" ]];
     then
-        echo -e "\033[1;33m! [WARNING] CStorPool\033[0m" "$OUTPUT"
-        COUNT=$((COUNT+1))
-    else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorPool\033[0m" "$OUTPUT"
+        echo -e "\033[0;32mcStor configuration found for namespace $NAMESPACE..\033[0m"
+        while read -r line;
+        do
+            CSP_NAME="$line"
+            CSP_STATUS="$(kubectl get csp -o json | jq -r '.items[] | select(.metadata.name | contains("'$CSP_NAME'")) | .status.phase')"
+            if [[ "$CSP_STATUS" != "Healthy" ]];
+            then
+                verbose && echo -e "\033[1;33m! [WARNING] CStorPool\033[0m" "$CSP_NAME $CSP_STATUS" && csp_stats
+                COUNT=$((COUNT+1))
+            else
+                verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorPool\033[0m" "$CSP_NAME $CSP_STATUS" && csp_stats
+            fi
+        done <<< "$CSP_LIST"
+        message cStorPool
     fi
 }
 
 cstorvolume_check () {
-    OUTPUT="$(echo "$line" | awk '{printf "%-40s %-10s %-8s\n", $2, $3, $4}')"
+    replica_check () {
+        kubectl get cstorvolumes -A -o json | jq -r '.items[] | select(.metadata.name | contains("'$PV_NAME'")) | "Specs:", .spec, "Replica status:", .status.replicaStatuses[]' | sed 's/^/            /'
+    }
+    CV_STATUS="$(kubectl get cstorvolumes -A -o json | jq -r '.items[] | select(.metadata.name | contains("'$PV_NAME'")) | .status.phase' )"
     if [[ "$CV_STATUS" != "Healthy" ]];
     then
-        [[ "$CV_STATUS" == "Offline" ]] && echo -e "\033[1;33m! [WARNING] CStorVolume\033[0m" "$OUTPUT" \
-        || echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   CStorVolume\033[0m" "$OUTPUT"
+        verbose && echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]    CStorVolume\033[0m" "$CV_NAME" "$CV_STATUS" && replica_check
+        COUNT=$((COUNT+1))
+    elif [[ "$CV_STATUS" == "Offline" ]];
+    then
+        verbose && echo -e "\033[1;33m! [WARNING]  CStorVolume\033[0m" "$CV_NAME" "$CV_STATUS" && replica_check
         COUNT=$((COUNT+1))
     else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorVolume\033[0m" "$OUTPUT"
+        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorVolume\033[0m" "$CV_NAME" "$CV_STATUS" && replica_check
     fi
 }
 
 cvr_check () {
-    OUTPUT="$(echo "$line" | awk '{printf "%-40s %-5s %-5s %-10s %-5s\n", $2, $3, $4, $5, $6}')"
+    cvr_status_detail () {
+        kubectl get cvr -A -o json | jq -r '.items[] | select(.metadata.name | contains("'$CVR_NAME'")) | .status' | sed 's/^/            /'
+    }
+    CVR_STATUS="$(kubectl get cvr -A -o json | jq -r '.items[] | select(.metadata.name | contains("'$CVR_NAME'")) | .status.phase')"
     if [[ "$CVR_STATUS" != "Healthy" ]];
     then
-        [[ "$CVR_STATUS" == "Offline" ]] && echo -e "\033[1;33m! [WARNING] CStorVolumeReplica\033[0m" "$OUTPUT" \
-        || echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   CStorVolumeReplica\033[0m" "$OUTPUT"
+        verbose && echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]    CStorVolumeReplica\033[0m" "$CVR_NAME" "$CVR_STATUS" && cvr_status_detail
+        COUNT=$((COUNT+1))
+    elif [[ "$CVR_STATUS" == "Offline" ]];
+    then
+        verbose && echo -e "\033[1;33m! [WARNING] CStorVolumeReplica\033[0m" "$CVR_NAME" "$CVR_STATUS" && cvr_status_detail
         COUNT=$((COUNT+1))
     else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorVolumeReplica\033[0m" "$OUTPUT"
+        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorVolumeReplica\033[0m" "$CVR_NAME" "$CVR_STATUS" && cvr_status_detail
     fi
 }
 
 peristent_storage () {
+    separator
     COUNT=0
-    PVC_LIST="$(kubectl get pvc -n "$NAMESPACE"  --no-headers 2> /dev/null)"
+    PVC_LIST="$(kubectl get pvc -n "$NAMESPACE" -o json | jq -r '.items[].metadata.name')"
     #loop  over pvc
-    if [[ "$PVC_LIST" == "" ]];then
+    if [[ "$PVC_LIST" == "" ]];
+    then
         echo -e "\033[0;33mPersistent storage not configured\033[0m for namespace $NAMESPACE."
         return
-    fi
-    while read -r line;
-    do
-        separator
-        PVC_STATUS="$(echo "$line" | awk '{print $2}')"
-        PVC_NAME="$(echo "$line" | awk '{print $1}')"
-        echo -e "\033[0;32mPVC details for pvc $PVC_NAME:\033[0m"
-        separator
-        pvc_check
-
-        NAMESPACE_PV_LIST="$(kubectl get pv --no-headers | grep "$PVC_NAME")"
-        separator
-        #looping over pv
+    else
+        echo  -e "\033[0;32mChecking persistent storage details in namespace $NAMESPACE..\033[0m"
         while read -r line;
         do
-            PV_NAME="$(echo "$line" | awk '{print $1}')"
-            PV_STATUS="$(kubectl get pv -A --no-headers| grep "$PV_NAME" | awk '{print $5}')"
-            echo -e "\033[0;32mPV details for pv $PV_NAME:\033[0m" | sed 's/^/      /'
-            COUNT=0
-            pv_check | sed "s/^/      /"
+            separator
+            PVC_NAME="$line"
+            PVC_STATUS="$(kubectl get pvc "$PVC_NAME" -n "$NAMESPACE" -o json | jq -r '.status.phase')"
+            PVC_ACCESSMODE="$(kubectl get pvc "$PVC_NAME" -n "$NAMESPACE" -o json | jq -r '.status.accessModes[]')"
+            echo -e "\033[0;32mPVC $PVC_NAME: $PVC_STATUS\033[0m"
+            pvc_check
 
-            [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94            \033[0m"no issues found for pv "$PV_NAME". | sed "s/^/      /" \
-            || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for pv "$PV_NAME". | sed "s/^/      /"
-
-            NS_CV_LIST="$(kubectl get cstorvolumes -A --no-headers | grep "$PV_NAME")"
-            if [ "$NS_CV_LIST" != "" ];
-            then
-                separator
-                echo -e "\033[0;32mCStorVolume details for pv $PV_NAME:\033[0m" | sed "s/^/            /"
+            NAMESPACE_PV_LIST="$(kubectl get pvc "$PVC_NAME" -n "$NAMESPACE" -o json | jq -r '.spec.volumeName')"
+            separator
+            #looping over pv
+            while read -r line;
+            do
+                PV_NAME="$line"
+                PV_STATUS="$(kubectl get pv "$PV_NAME" -o json | jq -r '.status.phase')"
+                echo -e "\033[0;32mPV $PV_NAME: $PV_STATUS\033[0m" | sed 's/^/      /'
                 COUNT=0
-                while read -r line;
-                do
-                    NS_CV_STATUS="$(echo "$line" | awk '{print$3}')"
-                    CV_STATUS=$NS_CV_STATUS
-                    cstorvolume_check | sed "s/^/            /"
-                done <<< "$NS_CV_LIST"
+                pv_check | sed 's/^/      /'
 
-                [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of CStorVolume. | sed "s/^/            /" \
-                || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for CStorVolume! | sed "s/^/            /"
-            fi
+                NS_CV_LIST="$(kubectl get cstorvolumes -A -o json | jq -r '.items[].metadata.name | select(. | contains("'$PV_NAME'"))')"
+                if [ "$NS_CV_LIST" != "" ];
+                then
+                    separator
+                    csp_check | sed "s/^/            /"
+                    separator
+                    echo -e "\033[0;32mcStorVolume status for namespace $NAMESPACE:\033[0m" | sed "s/^/            /"
+                    COUNT=0
+                    while read -r line;
+                    do
+                        CV_NAME="$line"
+                        cstorvolume_check | sed "s/^/            /"
+                    done <<< "$NS_CV_LIST"
+                    message cStorVolume | sed "s/^/            /"
+                fi
 
-            NS_CVR_LIST="$(kubectl get cvr -A --no-headers | grep "$PV_NAME")"
-            if [ "$NS_CVR_LIST" != "" ];
-            then
-                separator
-                echo -e "\033[0;32mCStorVolumeReplica details for pv $PV_NAME:\033[0m" | sed "s/^/            /"
-                COUNT=0
-                while read -r line;
-                do
-                    NS_CVR_STATUS="$(echo "$line" | awk '{print $5}')"
-                    CVR_STATUS=$NS_CVR_STATUS
-                    cvr_check | sed "s/^/            /"
-                done <<< "$NS_CVR_LIST"
-
-                [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of CStorVolumeReplica. | sed "s/^/            /" \
-                || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for CStorVolumeReplica! | sed "s/^/            /"
-            fi
-        done <<< "$NAMESPACE_PV_LIST"
-    done <<< "$PVC_LIST"
+                NS_CVR_LIST="$(kubectl get cvr -A -o json | jq -r '.items[] | select(.metadata.labels."cstorvolume.openebs.io\/name" | contains("'$PV_NAME'")) | .metadata.name')"
+                if [ "$NS_CVR_LIST" != "" ];
+                then
+                    separator
+                    echo -e "\033[0;32mcStorVolumeReplica status for namespace $NAMESPACE:\033[0m" | sed "s/^/            /"
+                    COUNT=0
+                    while read -r line;
+                    do
+                        CVR_NAME="$line"
+                        cvr_check | sed "s/^/            /"
+                    done <<< "$NS_CVR_LIST"
+                    message cStorVolumeReplica | sed "s/^/            /"
+                fi
+            done <<< "$NAMESPACE_PV_LIST"
+        done <<< "$PVC_LIST"
+    fi
 }
 
 pod_container_restart () {
@@ -172,10 +203,21 @@ pod_container_restart () {
             echo "$CONTAINER_JSON" | awk '{printf "\033[1;31m%-10s\033[0m %-5s %-25s %-25s\n", $1, $2, $3, $4}' | sed "s/^/                /"
             separator
             get_event () {
-                separator
-                kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry\|unexpected\|denied" | tail -3 | sed "s/^/                /"
+                LOGS="$(kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry\|unexpected\|denied\|IOException" | tail -3)"
+                if [ "$LOGS" != "" ];
+                then
+                    echo -e "\033[0;32mLogs for restarted container $line:\033[0m" | sed "s/^/                /"
+                    echo "$LOGS" | fold -w 70 -s| sed "s/^/                /"
+                else
+                    echo -e "\033[0;32mNo issues found in logs of container $line. Check the exit code.\033[0m" | sed "s/^/                /"
+                fi
             }
-            verbose && get_event || echo "Run script  with '-v' flag to get more details.." | sed "s/^/                /"
+            if verbose;
+            then
+                get_event
+            else
+                echo "Run script  with '-v' flag to get more details.." | sed "s/^/                /"
+            fi
             COUNT=$((COUNT+1))
         else
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
@@ -214,9 +256,10 @@ pod_state_pending () {
 }
 
 pod_state_init () {
-    POD_STATE_INIT_JSON="$(kubectl get event -n "$NAMESPACE" --field-selector involvedObject.name="$POD_NAME")"
+    INIT_CONTAINER_NAME="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r '.status.initContainerStatuses[].name')"
+    POD_LOG_INIT="$(kubectl logs "$POD_NAME" -n "$NAMESPACE" -c "$INIT_CONTAINER_NAME")"
     echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
-    echo -e "\033[0;31m$POD_STATE_INIT_JSON\033[0m" | sed "s/^/                /"
+    echo "$POD_LOG_INIT" | fold -w 70 -s | sed "s/^/                /"
 }
 
 pod_state_imagepullbackoff () {
@@ -294,29 +337,29 @@ pods () {
         if [[ "$STATUS" == "Running" ]];
         then
             CONTAINERS_RUNNING="$(echo "$line" | awk '{print $2}')"
-            if [[ "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $1}')" ==  "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $2}')" ]];
+            if [[ "$RESTART" -gt 0 ]];
             then
-                verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NAME" "$POD_NODE"
-            #else
-                if [[ "$RESTART" -gt 0 ]];
+                echo -e "\033[1;33m! [WARNING] pod\033[0m" "$POD_NODE"/"$POD_NAME" is "\033[1;32mRunning\033[0m" since "$POD_AGE", having containers restarted.
+                pod_container_restart
+            else
+                if [[ "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $1}')" ==  "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $2}')" ]];
                 then
-                    echo -e "\033[1;33m! [WARNING] pod\033[0m" "$POD_NODE"/"$POD_NAME" is "\033[1;32mRunning\033[0m" since "$POD_AGE", having containers restarted.
-                    pod_container_restart
-                else
                     verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NAME" "$POD_NODE"
+                else
+                    echo -e "\033[1;33m! [WARNING] pod\033[0m" "$POD_NODE"/"$POD_NAME" is "\033[1;32mRunning\033[0m" since "$POD_AGE", \
+                    with all containers not in running state. "\033[1;33mIt may take some time for all containers to come up.\033[0m"
                 fi
             fi
         fi
     done <<< "$POD_LIST"
-    [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of pods. \
-    || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for pods!
+    message pods
 }
 
 rs () {
     COUNT=0
     echo -e "\033[0;32mReplicaSet details:\033[0m"
     separator
-    RS_LIST="$(kubectl get rs -n $NAMESPACE --no-headers | awk '{if($2!=0) print}' 2> /dev/null)"
+    RS_LIST="$(kubectl get rs -n "$NAMESPACE" --no-headers | awk '{if($2!=0) print}' 2> /dev/null)"
     if [[ "$RS_LIST" == "" ]];
     then
         echo -e "\033[1;33m! [WARNING]    \033[0m 0 replicasets running in namespace $NAMESPACE."
@@ -335,10 +378,10 @@ rs () {
             verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      replicaset\033[0m" "$line"
         fi
     done <<< "$RS_LIST"
-    [ "$COUNT" == "0" ] && echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found with any of replicasets. \
-    || echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for replicasets!
+    message replicaSets
     separator
 }
+
 debug_ns() {
     [ "$KUBECONFIG" == "" ] && echo "Please set KUBECONFIG for the cluster." && exit
     check_namespace
@@ -346,10 +389,9 @@ debug_ns() {
     echo "-------------------------------------------------------------"
     echo -e "\033[0;32mCrawling objects in namespace $NAMESPACE:\033[0m"
     echo "-------------------------------------------------------------"
-    rs
+#    rs
     pods
     peristent_storage
-    separator
 }
 
 [[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
@@ -357,4 +399,5 @@ debug_ns
 
 END_TIME=$(date +%s)
 EXECUTION_TIME=$((END_TIME-START_TIME))
+separator
 echo Total time taken: "$EXECUTION_TIME"s
