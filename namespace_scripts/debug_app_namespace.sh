@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 ##########################################################################
 # This script finds all possible issues in namespace.                    #
 # Author: Mukund                                                         #
@@ -33,7 +33,7 @@ message () {
     then
         echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found for $OBJECT.
     else
-        echo -e "\033[1;31m[ALERT!]    \033[0m"issues found for $OBJECT!
+        echo -e "\033[1;31;5m[ALERT!]    \033[0m"issues found for $OBJECT!
     fi
 }
 
@@ -212,12 +212,7 @@ pod_container_restart () {
                     echo -e "\033[0;32mNo issues found in logs of container $line. Check the exit code.\033[0m" | sed "s/^/                /"
                 fi
             }
-            if verbose;
-            then
-                get_event
-            else
-                echo "Run script  with '-v' flag to get more details.." | sed "s/^/                /"
-            fi
+            verbose && get_event
             COUNT=$((COUNT+1))
         else
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | sed "s/^/                /"
@@ -238,7 +233,6 @@ pod_state_crashloopbackoff () {
         then
             echo -e "Status found in kubectl get -o json pod $POD_NAME -n $NAMESPACE:" | sed "s/^/                /"
             echo -e "\033[0;33m$POD_STATE_CONTAINER_JSON\033[0m" | sed "s/^/                /"
-            echo -e "run script with '-v' flag to get more details.." | sed "s/^/                /"
         fi
     done <<< "$POD_STATE_CONTAINER_LIST"
 }
@@ -258,8 +252,11 @@ pod_state_pending () {
 pod_state_init () {
     INIT_CONTAINER_NAME="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r '.status.initContainerStatuses[].name')"
     POD_LOG_INIT="$(kubectl logs "$POD_NAME" -n "$NAMESPACE" -c "$INIT_CONTAINER_NAME")"
-    echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
-    echo "$POD_LOG_INIT" | fold -w 70 -s | sed "s/^/                /"
+    if verbose;
+    then
+        echo -e "Reason of pod with status $STATUS:" | sed "s/^/                /"
+        echo "$POD_LOG_INIT" | fold -w 70 -s | sed "s/^/                /"
+    fi
 }
 
 pod_state_imagepullbackoff () {
@@ -389,9 +386,10 @@ debug_ns() {
     echo "-------------------------------------------------------------"
     echo -e "\033[0;32mCrawling objects in namespace $NAMESPACE:\033[0m"
     echo "-------------------------------------------------------------"
-#    rs
+    rs
     pods
     peristent_storage
+    echo "Run script  with '-v' flag to get more details.."
 }
 
 [[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
