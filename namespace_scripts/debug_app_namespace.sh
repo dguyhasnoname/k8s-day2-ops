@@ -14,11 +14,14 @@ verbose () {
     [ "$FLAG" == "-v" ] && true
 }
 
-separator() {
+separator () {
     printf '\n'
 }
 
-usage() {
+indent () {
+    sed "s/^/            /"
+}
+usage () {
     echo "[WARNING]: Export KUBECONFIG before running the script."
     echo "Usage: "
     echo "./debug_app_namespace.sh -h/-help/--h           help"
@@ -31,10 +34,11 @@ message () {
     OBJECT="$1"
     if  [ "$COUNT" == "0" ];
     then
-        echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found for $OBJECT.
+        echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found for "$OBJECT".
     else
-        echo -e "\033[1;31;5m[ALERT!]    \033[0m"issues found for $OBJECT!
+        echo -e "\033[1;31;5m[ALERT!]    \033[0m"issues found for "$OBJECT"!
     fi
+    separator
 }
 
 check_namespace() {
@@ -143,7 +147,7 @@ peristent_storage () {
             PVC_NAME="$line"
             PVC_STATUS="$(kubectl get pvc "$PVC_NAME" -n "$NAMESPACE" -o json | jq -r '.status.phase')"
             PVC_ACCESSMODE="$(kubectl get pvc "$PVC_NAME" -n "$NAMESPACE" -o json | jq -r '.status.accessModes[]')"
-            echo -e "\033[0;32mPVC $PVC_NAME: $PVC_STATUS\033[0m"
+            echo -e "\033[0;32mPVC $PVC_NAME: $PVC_STATUS\033[0m" "$PVC_ACCESSMODE"
             pvc_check
 
             NAMESPACE_PV_LIST="$(kubectl get pvc "$PVC_NAME" -n "$NAMESPACE" -o json | jq -r '.spec.volumeName')"
@@ -161,30 +165,30 @@ peristent_storage () {
                 if [ "$NS_CV_LIST" != "" ];
                 then
                     separator
-                    csp_check | sed "s/^/            /"
+                    csp_check | indent
                     separator
-                    echo -e "\033[0;32mcStorVolume status for namespace $NAMESPACE:\033[0m" | sed "s/^/            /"
+                    echo -e "\033[0;32mcStorVolume status for namespace $NAMESPACE:\033[0m" | indent
                     COUNT=0
                     while read -r line;
                     do
                         CV_NAME="$line"
-                        cstorvolume_check | sed "s/^/            /"
+                        cstorvolume_check | indent
                     done <<< "$NS_CV_LIST"
-                    message cStorVolume | sed "s/^/            /"
+                    message cStorVolume | indent
                 fi
 
                 NS_CVR_LIST="$(kubectl get cvr -A -o json | jq -r '.items[] | select(.metadata.labels."cstorvolume.openebs.io\/name" | contains("'$PV_NAME'")) | .metadata.name')"
                 if [ "$NS_CVR_LIST" != "" ];
                 then
                     separator
-                    echo -e "\033[0;32mcStorVolumeReplica status for namespace $NAMESPACE:\033[0m" | sed "s/^/            /"
+                    echo -e "\033[0;32mcStorVolumeReplica status for namespace $NAMESPACE:\033[0m" | indent
                     COUNT=0
                     while read -r line;
                     do
                         CVR_NAME="$line"
-                        cvr_check | sed "s/^/            /"
+                        cvr_check | indent
                     done <<< "$NS_CVR_LIST"
-                    message cStorVolumeReplica | sed "s/^/            /"
+                    message cStorVolumeReplica | indent
                 fi
             done <<< "$NAMESPACE_PV_LIST"
         done <<< "$PVC_LIST"
@@ -376,9 +380,32 @@ rs () {
         fi
     done <<< "$RS_LIST"
     message replicaSets
-    separator
 }
 
+velero_backup () {
+    separator
+    VELERO_BACKUP_JSON="$(velero backup get -o json)"
+    VELERO_BACKUP_LIST="$(echo "$VELERO_BACKUP_JSON" | jq -r '.items[].metadata.name')"
+    if [[ "$VELERO_BACKUP_LIST" != "" ]];
+    then
+        echo -e "\033[1;32mVelero backups details: \033[0m"
+        separator
+        echo -e "\033[1;32m\xE2\x9C\x94           velero backups found: \033[0m" "$(echo "$VELERO_BACKUP_LIST" | wc -l)"
+        while read -r line;
+        do
+            VELERO_BACKUP_STATUS="$(echo "$VELERO_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name == "'$line'") | .status.phase')"
+            VELERO_BACKUP_NAMESPACE="$(echo "$VELERO_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name == "'$line'") | .spec.includedNamespaces[]')"
+            if [[ "$VELERO_BACKUP_STATUS" != "Completed" ]];
+            then
+                echo -e "\033[1;33m! [WARNING] backup\033[0m" "$line" status: "\033[1;31m$VELERO_BACKUP_STATUS\033[0m" for namespace "$VELERO_BACKUP_NAMESPACE"
+                echo "$VELERO_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name == "'$line'") | .status' | sed "s/^/                /"
+            else
+                verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      backup\033[0m" "$line" status: "\033[1;32m$VELERO_BACKUP_STATUS\033[0m" for namespace "$VELERO_BACKUP_NAMESPACE"
+            fi
+        done <<< "$VELERO_BACKUP_LIST"
+    fi
+    message "velero backup"
+}
 debug_ns() {
     [ "$KUBECONFIG" == "" ] && echo "Please set KUBECONFIG for the cluster." && exit
     [ -x jq ] && echo "Command 'jq' not found. Please install it." >&2 && exit 1
@@ -389,6 +416,7 @@ debug_ns() {
     echo "-------------------------------------------------------------"
     rs
     pods
+    [[ "$NAMESPACE" == "velero" ]] && velero_backup
     peristent_storage
     ! verbose && echo "Run script  with '-v' flag to get more details.."
 }
