@@ -381,6 +381,7 @@ rs () {
 
 debug_ns() {
     [ "$KUBECONFIG" == "" ] && echo "Please set KUBECONFIG for the cluster." && exit
+    [ -x jq ] && echo "Command 'jq' not found. Please install it." >&2 && exit 1
     check_namespace
     clear
     echo "-------------------------------------------------------------"
@@ -389,7 +390,7 @@ debug_ns() {
     rs
     pods
     peristent_storage
-    echo "Run script  with '-v' flag to get more details.."
+    ! verbose && echo "Run script  with '-v' flag to get more details.."
 }
 
 [[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
