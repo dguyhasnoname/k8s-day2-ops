@@ -25,10 +25,11 @@ def usage():
     sys.exit(1)
 
 def init_container_statuses(i):
-    for c in i.status.init_container_statuses:
-        if not c.ready:
-            print("\tinit-cont status: %s" % (c.state.waiting.reason))
-            print("\tinit-cont reason: %s" % (c.state.waiting.message))
+    if i.status.init_container_statuses:
+        for c in i.status.init_container_statuses:
+            if not c.ready:
+                print("\tinit-cont status: %s" % (c.state.waiting.reason))
+                print("\tinit-cont reason: %s" % (c.state.waiting.message))
 
 def container_statuses(i):
     running_container_count=0
