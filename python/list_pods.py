@@ -1,9 +1,9 @@
-# #########################################################
+###########################################################
 # This script list pods and related PVCs in namespace and #
 # possible issues for pod failures.                       #
 # Author: Mukund                                          #
 # Date: 29 Sep 2019                                       #
-# #########################################################
+###########################################################
 
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
@@ -149,7 +149,10 @@ def main():
     except KeyError:
         print "\033[0;31mKUBECONFIG not set!\033[0m"
         usage()
-    verify_namespace(namespace)
+    if namespace == '-h'  or namespace == '--h' or namespace == '--help' or namespace == '--help':
+        usage()
+    else:
+        verify_namespace(namespace)
     if verbose == '-v':
         pods()
         pvc()
@@ -163,5 +166,9 @@ def main():
     print("\033[1;30mTotal time taken:\033[0m %ss" % (time.time() - start_time))
 
 if __name__ == "__main__":
+    try:
+        namespace = sys.argv[1]
+    except IndexError:
+        usage()    
     namespace =  sys.argv[1]
     main()
