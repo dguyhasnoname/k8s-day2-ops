@@ -1,9 +1,9 @@
-###########################################################
-# This script list pods and related PVCs in namespace and #
-# possible issues for pod failures.                       #
-# Author: Mukund                                          #
-# Date: 29 Sep 2019                                       #
-###########################################################
+##############################################################
+# Description   : This script list pods and related PVCs in  #
+# a namespace and possible reasons for pod failure.          #
+# Author        : Mukund                                     #
+# Date          : 29 Sep 2019                                #
+##############################################################
 
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
@@ -169,6 +169,6 @@ if __name__ == "__main__":
     try:
         namespace = sys.argv[1]
     except IndexError:
-        usage()    
+        usage()
     namespace =  sys.argv[1]
     main()
