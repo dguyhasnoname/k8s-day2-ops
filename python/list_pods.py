@@ -35,30 +35,46 @@ def container_statuses(i):
     running_container_count=0
     total_container_count=0
     message = ''
-    for c in i.status.container_statuses:
-        total_container_count += 1
-        if c.ready:
-            running_container_count += 1
-            status = 'Running'
-        elif c.state.waiting:
-            status = c.state.waiting.reason
-            message = c.state.waiting.message
-        else:
-            status = 'Terminating'
-            message = c.state.terminated.exit_code
+    pod_status = []
+    if i.status.phase  != 'Failed':
+        for s in i.status.conditions:
+            status = s.status
+            pod_status.append(status)
+
+        for c in i.status.container_statuses:
+            total_container_count += 1
+            if c.ready:
+                running_container_count += 1
+                status = 'Running'
+            elif c.state.waiting:
+                status = c.state.waiting.reason
+                message = c.state.waiting.message
+            else:
+                status = 'Terminating'
+                message = c.state.terminated.exit_code
+    else:
+        for c in i.spec.containers:
+            total_container_count += 1
+        status = i.status.reason
+        message =  i.status.message
+        rc = 0
+        running_container_count = 0
+        c.restart_count = 0
 
     return {"container_name": c.name, "tcc": total_container_count, "status": status, \
-    "reason": message, "rcc": running_container_count, "rc": c.restart_count}
+    "reason": message, "rcc": running_container_count, "rc": c.restart_count, \
+    "pod_status": pod_status }
 
 def running_pod_cont_restart_reason(i):
-    for c in i.status.container_statuses:
-        if c.restart_count > 0:
-            print("\tContainer\t: %s" % (c.name))
-            print("\texitCode\t: %s" % (c.last_state.terminated.exit_code))
-            print("\treason\t\t: %s" % (c.last_state.terminated.reason))
-            print("\tstartedAt\t: %s" % (c.last_state.terminated.started_at))
-            print("\tfinishedAt\t: %s" % (c.last_state.terminated.finished_at))
-            separator()
+    if i.status.container_statuses:
+        for c in i.status.container_statuses:
+            if c.restart_count > 0:
+                print("\tContainer\t: %s" % (c.name))
+                print("\texitCode\t: %s" % (c.last_state.terminated.exit_code))
+                print("\treason\t\t: %s" % (c.last_state.terminated.reason))
+                print("\tstartedAt\t: %s" % (c.last_state.terminated.started_at))
+                print("\tfinishedAt\t: %s" % (c.last_state.terminated.finished_at))
+                separator()
 
 def resources(i):
     for c in i.spec.containers:
@@ -72,13 +88,9 @@ def pods():
     separator()
     for i in pod_list.items:
         pod_name = i.metadata.name
-        pod_status = []
-        for s in i.status.conditions:
-            status = s.status
-            pod_status.append(status)
 
-        if any('False' in t for t in pod_status):
-            cont_status = container_statuses(i)
+        cont_status = container_statuses(i)
+        if any('False' in t for t in cont_status['pod_status']) or cont_status['status'] == 'Evicted':
             print("\033[1;31m\xE2\x9C\x96\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;31m%-25s\033[0m \033[0;30m%-3s %-20s\033[0m" \
             % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
             cont_status['rc'], i.spec.node_name))
@@ -87,7 +99,6 @@ def pods():
             print("\texitCode/reason\t: %s" %(cont_status['reason']))
             resources(i)
         else:
-            cont_status=container_statuses(i)
             print("\033[1;32m\xE2\x9C\x94\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;32m%-10s\033[0m \033[0;30m%-3s %-20s\033[0m" \
             % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
             cont_status['rc'], i.spec.node_name))
