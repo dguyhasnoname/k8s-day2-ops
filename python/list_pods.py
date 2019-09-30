@@ -8,7 +8,8 @@
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from pprint import pprint
-import sys, time, os
+import sys, time, os, logging
+import textwrap
 
 start_time = time.time()
 config.load_kube_config()
@@ -65,7 +66,21 @@ def container_statuses(i):
     "reason": message, "rcc": running_container_count, "rc": c.restart_count, \
     "pod_status": pod_status }
 
-def running_pod_cont_restart_reason(i):
+def container_logs(i,c,namespace):
+    name = i.metadata.name
+    container = c.name
+    namespace = namespace
+    output = ''
+    error_string = [ 'warn', 'error', 'exception', 'timeout', 'retry', 'unexpected', 'denied', 'IOException' ]
+    prev_cont_logs = v1.read_namespaced_pod_log(name, namespace, container=container, \
+        previous=True, tail_lines=10, timestamps=True)
+    print("\t\033[1;33mPrevious container logs for container:\033[0m %s" % (container))
+    for line in iter(prev_cont_logs.splitlines()):
+        for l in error_string:
+            if l in line:
+                print(textwrap.fill(line, 100, initial_indent=("\t"),subsequent_indent=("\t")))
+
+def running_pod_cont_restart_reason(i,verbose,namespace):
     if i.status.container_statuses:
         for c in i.status.container_statuses:
             if c.restart_count > 0:
@@ -75,6 +90,9 @@ def running_pod_cont_restart_reason(i):
                 print("\tstartedAt\t: %s" % (c.last_state.terminated.started_at))
                 print("\tfinishedAt\t: %s" % (c.last_state.terminated.finished_at))
                 separator()
+                if verbose == '-v':
+                    container_logs(i,c,namespace)
+
 
 def resources(i):
     for c in i.spec.containers:
@@ -86,27 +104,30 @@ def pods():
     pod_list = v1.list_namespaced_pod(namespace, watch=False)
     print "\033[1;35mListing pods in namespace: \033[0m", namespace
     separator()
-    for i in pod_list.items:
-        pod_name = i.metadata.name
+    if pod_list.items:
+        for i in pod_list.items:
+            pod_name = i.metadata.name
 
-        cont_status = container_statuses(i)
-        if any('False' in t for t in cont_status['pod_status']) or cont_status['status'] == 'Evicted':
-            print("\033[1;31m\xE2\x9C\x96\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;31m%-25s\033[0m \033[0;30m%-3s %-20s\033[0m" \
-            % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
-            cont_status['rc'], i.spec.node_name))
-            init_container_statuses(i)
-            print("\tCotainer name\t: %s" %(cont_status['container_name']))
-            print("\texitCode/reason\t: %s" %(cont_status['reason']))
-            resources(i)
-        else:
-            print("\033[1;32m\xE2\x9C\x94\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;32m%-10s\033[0m \033[0;30m%-3s %-20s\033[0m" \
-            % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
-            cont_status['rc'], i.spec.node_name))
-            running_pod_cont_restart_reason(i)
+            cont_status = container_statuses(i)
+            if any('False' in t for t in cont_status['pod_status']) or cont_status['status'] == 'Evicted':
+                print("\033[1;31m\xE2\x9C\x96\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;31m%-25s\033[0m \033[0;30m%-3s %-20s\033[0m" \
+                % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
+                cont_status['rc'], i.spec.node_name))
+                init_container_statuses(i)
+                print("\tCotainer name\t: %s" %(cont_status['container_name']))
+                print("\texitCode/reason\t: %s" %(cont_status['reason']))
+                resources(i)
+            else:
+                print("\033[1;32m\xE2\x9C\x94\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;32m%-10s\033[0m \033[0;30m%-3s %-20s\033[0m" \
+                % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
+                cont_status['rc'], i.spec.node_name))
+                running_pod_cont_restart_reason(i,verbose,namespace)
 
-        for p in i.spec.volumes:
-            if p.persistent_volume_claim:
-                print("\tPVC name\t: %-65s" % (p.persistent_volume_claim.claim_name))
+            for p in i.spec.volumes:
+                if p.persistent_volume_claim:
+                    print("\tPVC name\t: %-65s" % (p.persistent_volume_claim.claim_name))
+    else:
+        print "\033[1;33mNo running pods found in namespace\033[0m", namespace
 
 def  pvc():
     separator()
@@ -141,10 +162,6 @@ def verify_namespace(namespace):
 
 def main():
     try:
-        verbose = sys.argv[2]
-    except IndexError:
-        verbose = 'null'
-    try:
         os.environ['KUBECONFIG']
     except KeyError:
         print "\033[0;31mKUBECONFIG not set!\033[0m"
@@ -170,5 +187,9 @@ if __name__ == "__main__":
         namespace = sys.argv[1]
     except IndexError:
         usage()
+    try:
+        verbose = sys.argv[2]
+    except IndexError:
+        verbose = 'null'
     namespace =  sys.argv[1]
     main()
