@@ -8,12 +8,13 @@
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from pprint import pprint
-import sys, time, os, logging
-import textwrap
+import sys, time, os, textwrap
+import datetime, pytz
 
 start_time = time.time()
 config.load_kube_config()
 v1 = client.CoreV1Api()
+v2 = client.AppsV1Api()
 
 def separator():
     print  ""
@@ -24,6 +25,20 @@ def usage():
     print "\033[0;33mpython list_pods.py <namespace>\t\t: prints pod details and possible issues in a namespace.\033[0m"
     print "\033[0;33mpython list_pods.py <namespace> -v\t: prints pod details and events in namespace.\033[0m"
     sys.exit(1)
+
+def age(creation_time):
+    utc_time = datetime.datetime.now(pytz.UTC)
+    age = utc_time - creation_time
+    def convert_timedelta(duration):
+        days, seconds = duration.days, duration.seconds
+        no_of_days = days
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        seconds = (seconds % 60)
+        return no_of_days, hours, minutes, seconds
+    no_of_days, hours, minutes, seconds = convert_timedelta(age)
+    total_age = str(no_of_days) + "d" +  str(hours) + "h" + str(minutes) + "m"
+    return total_age
 
 def init_container_statuses(i):
     if i.status.init_container_statuses:
@@ -71,14 +86,19 @@ def container_logs(i,c,namespace):
     container = c.name
     namespace = namespace
     output = ''
-    error_string = [ 'warn', 'error', 'exception', 'timeout', 'retry', 'unexpected', 'denied', 'IOException' ]
+    last_line = ''
+    error_string = [ 'error', 'fail', 'kill', 'timeout', 'denied', 'retry', \
+        'unexpected', 'IOException', 'refuse', 'warn', 'exception', 'terminate' ]
     prev_cont_logs = v1.read_namespaced_pod_log(name, namespace, container=container, \
         previous=True, tail_lines=10, timestamps=True)
     print("\t\033[1;33mPrevious container logs for container:\033[0m %s" % (container))
     for line in iter(prev_cont_logs.splitlines()):
         for l in error_string:
-            if l in line:
-                print(textwrap.fill(line, 100, initial_indent=("\t"),subsequent_indent=("\t")))
+            if l.lower() in line.lower():
+                if last_line != line:
+                    print(textwrap.fill(line, 100, initial_indent=("\t"),subsequent_indent=("\t")))
+                last_line = line
+
 
 def running_pod_cont_restart_reason(i,verbose,namespace):
     if i.status.container_statuses:
@@ -93,7 +113,6 @@ def running_pod_cont_restart_reason(i,verbose,namespace):
                 if verbose == '-v':
                     container_logs(i,c,namespace)
 
-
 def resources(i):
     for c in i.spec.containers:
         resources = c.resources.requests
@@ -107,20 +126,22 @@ def pods():
     if pod_list.items:
         for i in pod_list.items:
             pod_name = i.metadata.name
+            creation_time = i.metadata.creation_timestamp
+            total_age = age(creation_time)
 
             cont_status = container_statuses(i)
             if any('False' in t for t in cont_status['pod_status']) or cont_status['status'] == 'Evicted':
-                print("\033[1;31m\xE2\x9C\x96\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;31m%-25s\033[0m \033[0;30m%-3s %-20s\033[0m" \
+                print("\033[1;31m\xE2\x9C\x96\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;31m%-25s\033[0m %-3s %-10s %-20s" \
                 % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
-                cont_status['rc'], i.spec.node_name))
+                cont_status['rc'], total_age, i.spec.node_name))
                 init_container_statuses(i)
                 print("\tCotainer name\t: %s" %(cont_status['container_name']))
                 print("\texitCode/reason\t: %s" %(cont_status['reason']))
                 resources(i)
             else:
-                print("\033[1;32m\xE2\x9C\x94\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;32m%-10s\033[0m \033[0;30m%-3s %-20s\033[0m" \
+                print("\033[1;32m\xE2\x9C\x94\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;32m%-10s\033[0m %-3s %-10s %-20s" \
                 % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
-                cont_status['rc'], i.spec.node_name))
+                cont_status['rc'], total_age, i.spec.node_name))
                 running_pod_cont_restart_reason(i,verbose,namespace)
 
             for p in i.spec.volumes:
@@ -138,9 +159,23 @@ def  pvc():
         total_pvc_count = 0
         for i in pvc_list.items:
             total_pvc_count += 1
-            print("%-50s %-30s %-5s %-8s %-15s" % (i.metadata.name, i.spec.volume_name, \
+            print("%-55s %-30s %-5s %-8s %-15s" % (i.metadata.name, i.spec.volume_name, \
             i.status.capacity[u'storage'], i.status.phase, i.status.access_modes[0]))
         separator()
+
+def replicaset(namespace):
+    separator()
+    rs_list  = v2.list_namespaced_replica_set(namespace)
+    if rs_list.items:
+        print "\033[1;35mListing replicaSets in namespace: \033[0m", namespace
+        print 'NAME'.ljust(50, ' '), 'DESIRED'.ljust(7, ' '), 'CURRENT'.ljust(7, ' '), \
+            'READY'.ljust(7, ' '), 'AGE'.ljust(5, ' ')
+        for rs in rs_list.items:
+            if rs.spec.replicas != 0:
+                creation_time = rs.metadata.creation_timestamp
+                total_age = age(creation_time)
+                print("%-50s %-7s %-7s %-7s %-5s" %(rs.metadata.name, rs.spec.replicas, \
+                rs.status.fully_labeled_replicas, rs.status.available_replicas, total_age))
 
 def namespace_events(namespace):
     ns_events = v1.list_namespaced_event(namespace)
@@ -148,7 +183,7 @@ def namespace_events(namespace):
     for e in ns_events.items:
         if e.type != 'Normal':
             if firstTime == []:
-                print("\033[1;35mEvents found in namespace: \033[0m%s" % (namespace))
+                print("\033[1;35mEvents found in namespace which needs attention: \033[0m%s" % (namespace))
                 separator()
                 firstTime.append('Not Empty')
             print("\033[1;31m%s\033[0m\t%s" %(e.type, e.message))
@@ -156,6 +191,7 @@ def namespace_events(namespace):
 def verify_namespace(namespace):
     try:
         api_response = v1.read_namespace(namespace)
+        print("\033[1;32mNamespace found: \033[0m%s" %(namespace))
     except ApiException as e:
         print("\033[1;31mNamespace was not found!\033[0m%s" % (e))
         usage()
@@ -171,6 +207,7 @@ def main():
     else:
         verify_namespace(namespace)
     if verbose == '-v':
+        replicaset(namespace)
         pods()
         pvc()
         namespace_events(namespace)
@@ -186,6 +223,7 @@ if __name__ == "__main__":
     try:
         namespace = sys.argv[1]
     except IndexError:
+        print "\033[0;31mEmpty Arguments!\033[0m"
         usage()
     try:
         verbose = sys.argv[2]
