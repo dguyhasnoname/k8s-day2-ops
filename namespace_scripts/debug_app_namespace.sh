@@ -10,6 +10,12 @@
 START_TIME=$(date +%s)
 NAMESPACE=${1:-kube-system}
 FLAG="$2"
+YELLOW='\033[1;33m'
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+BOLD='\033[1;30m'
+NC='\033[0m'
+TICK='\xE2\x9C\x94'
 
 verbose () {
     [ "$FLAG" == "-v" ] && true
@@ -37,7 +43,7 @@ message () {
     OBJECT="$1"
     if  [ "$COUNT" == "0" ];
     then
-        echo -e "\033[1;32m\xE2\x9C\x94           \033[0m"no issues found for "$OBJECT".
+        echo -e "${GREEN}${TICK}           \033[0m"no issues found for "$OBJECT".
     else
         echo -e "\033[1;31;5m[ALERT!]    \033[0m"issues found for "$OBJECT"!
     fi
@@ -48,7 +54,7 @@ check_namespace() {
     echo "Validating namespace $NAMESPACE ..."
     NS_VALIDATION="$(kubectl get ns/"$NAMESPACE")"
     [ "$NS_VALIDATION" != "" ] && echo -en "\033[0;32mNamespace $NAMESPACE found.\033[0m" && echo " Fetching objects in namespace $NAMESPACE..."
-    [ "$NS_VALIDATION" == "" ] && echo -e "\033[1;31m[ERROR]\033[0m" Namespace "$NAMESPACE" was not found! Please provide correct namespace. && exit
+    [ "$NS_VALIDATION" == "" ] && echo -e "${RED}[ERROR]\033[0m" Namespace "$NAMESPACE" was not found! Please provide correct namespace. && exit
 }
 
 pvc_check () {
@@ -57,7 +63,7 @@ pvc_check () {
         echo -e "\033[1;33m! [WARNING] pvc\033[0m" "$line"
         COUNT=$((COUNT+1))
     else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pvc\033[0m" "$PVC_NAME"
+        verbose && echo -e "${GREEN}${TICK} [OK]      pvc\033[0m" "$PVC_NAME"
     fi
     message pvc
 }
@@ -68,7 +74,7 @@ pv_check () {
         echo -e "\033[1;33m! [WARNING] pv\033[0m" "$line"
         COUNT=$((COUNT+1))
     else
-        verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pv\033[0m" "$line"
+        verbose && echo -e "${GREEN}${TICK} [OK]      pv\033[0m" "$line"
     fi
     message pv
 }
@@ -89,7 +95,7 @@ csp_check () {
                 echo -e "\033[1;33m! [WARNING] csp_check\033[0m" "$(echo "$CST_GET_DETAIL" | grep "$CSP_NAME")"
                 COUNT=$((COUNT+1))
             else
-                echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorPool\033[0m" "$(echo "$CST_GET_DETAIL" | grep "$CSP_NAME")"
+                echo -e "${GREEN}${TICK} [OK]      CstorPool\033[0m" "$(echo "$CST_GET_DETAIL" | grep "$CSP_NAME")"
             fi
         done <<< "$CSP_LIST"
         message cStorPool
@@ -119,7 +125,7 @@ cstorvolume_check () {
     CV_GET_DETAILS="$(kubectl get cstorvolume -A)"
     if [[ "$CV_STATUS" != "Healthy" ]];
     then
-        echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]    CStorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
+        echo -e "${RED}\xE2\x9D\x8C[ERROR]    CStorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
         replica_check
         COUNT=$((COUNT+1))
     elif [[ "$CV_STATUS" == "Offline" ]];
@@ -128,7 +134,7 @@ cstorvolume_check () {
         replica_check
         COUNT=$((COUNT+1))
     else
-        echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
+        echo -e "${GREEN}${TICK} [OK]      CstorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
         replica_check
     fi
 }
@@ -137,14 +143,14 @@ cvr_check () {
     CVR_STATUS="$(echo "$CVR_STATUS_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$CVR_NAME'")) | .status.phase')"
     if [[ "$CVR_STATUS" != "Healthy" ]];
     then
-        echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]    CStorVolumeReplica\033[0m" "$CVR_DETAIL"
+        echo -e "${RED}\xE2\x9D\x8C[ERROR]    CStorVolumeReplica\033[0m" "$CVR_DETAIL"
         COUNT=$((COUNT+1))
     elif [[ "$CVR_STATUS" == "Offline" ]];
     then
         echo -e "\033[1;33m! [WARNING] CStorVolumeReplica\033[0m" "$CVR_DETAIL"
         COUNT=$((COUNT+1))
     else
-        echo -e "\033[1;32m\xE2\x9C\x94 [OK]      CstorVolumeReplica\033[0m" "$CVR_DETAIL"
+        echo -e "${GREEN}${TICK} [OK]      CstorVolumeReplica\033[0m" "$CVR_DETAIL"
     fi
 }
 
@@ -230,7 +236,7 @@ pod_container_restart () {
         if [[ "$CONTAINER_JSON" != "" && $(echo "$CONTAINER_JSON" | awk '{print $1}') != "Completed" ]];
         then
             echo -e "Container \033[1;33m$line\033[0m restart count: $RESTART" | indent 16
-            echo "$CONTAINER_JSON" | awk '{printf "\033[1;31m%-10s\033[0m %-5s %-25s %-25s\n", $1, $2, $3, $4}' | indent 16
+            echo "$CONTAINER_JSON" | awk '{printf "'${RED}'%-10s'${NC}' %-5s %-25s %-25s\n", $1, $2, $3, $4}' | indent 16
             separator
             get_logs () {
                 LOGS="$(kubectl logs --tail=100 "$POD_NAME" -c "$line" --previous -n "$NAMESPACE"  |  grep -i  "warn\|error\|exception\|timeout|\retry\|unexpected\|denied\|IOException" | tail -3)"
@@ -310,6 +316,11 @@ pod_state_containercreating () {
     echo -e "\033[0;31m$POD_STATE_CONTAINER_CREATING_JSON\033[0m" | indent 16
 }
 
+pod_state_terminating () {
+    POD_STATE_CONTAINER_TERMINATING_JSON="$(kubectl get pods "$POD_NAME" -o json -n "$NAMESPACE" | jq -r  '.status.conditions[].message | select(.!=null)')"
+    echo -e "\033[0;31m$POD_STATE_CONTAINER_TERMINATING_JSON\033[0m" | indent 16
+}
+
 pods () {
     COUNT=0
     echo -e "\033[1;35mPod details:\033[0m"
@@ -319,8 +330,8 @@ pods () {
         echo -e "\033[1;33m! [WARNING]    \033[0m 0 pods running in namespace $NAMESPACE."
         return
     else
-        POD_COUNT="$(printf "$POD_LIST" | wc -l)"
-        echo -e "\033[1;32m\xE2\x9C\x94           pods found:$POD_COUNT\033[0m"
+        POD_COUNT="$(echo "$POD_LIST" | wc -l)"
+        echo -e "${GREEN}${TICK}           pods found:$POD_COUNT\033[0m"
     fi
     while read -r line;
     do
@@ -332,7 +343,7 @@ pods () {
         call_pod_fun () {
             if [[ "$STATUS" == "$1" ]];
             then
-                echo -e "\033[1;31m\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+                echo -e "${RED}\xE2\x9D\x8C[ERROR]   pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
                 "$2"
                 COUNT=$((COUNT+1))
             fi
@@ -346,10 +357,11 @@ pods () {
         call_pod_fun InvalidImageName pod_state_imagepullbackoff
         call_pod_fun Pending pod_state_pending
         call_pod_fun ContainerCreating pod_state_containercreating
+        call_pod_fun Terminating pod_state_terminating
 
         if [[ "$STATUS" == "Completed" ]];
         then
-            verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
+            verbose && echo -e "${GREEN}${TICK} [OK]      pod\033[0m" "$POD_NODE"/"$POD_NAME" status: "$STATUS"
         fi
 
         if [[ "$STATUS" == "Running" ]];
@@ -362,13 +374,14 @@ pods () {
             else
                 if [[ "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $1}')" ==  "$(echo "$CONTAINERS_RUNNING" | awk -F '/' '{print $2}')" ]];
                 then
-                    verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$line"
+                    verbose && echo -e "${GREEN}${TICK} [OK]      pod\033[0m" "$line"
                 else
                     echo -e "\033[1;33m! [WARNING] pod\033[0m" "$line"
                     separator
                     echo "Events in the name space $NAMESPACE:" | indent 16
                     EVENTS="$(kubectl get events -o json -n "$NAMESPACE" --sort-by=.metadata.creationTimestamp --field-selector type!=Normal | jq '.items[].message')"
                     echo -e "\033[0;31m$EVENTS\033[0m" | fold -w 70 -s | indent 16
+                    COUNT=$((COUNT+1))
                 fi
             fi
         fi
@@ -387,7 +400,7 @@ rs () {
         return
     else
         RS_COUNT="$(echo "$RS_LIST" | wc -l)"
-        echo -e "\033[1;32m\xE2\x9C\x94           replicaset found:$RS_COUNT\033[0m"
+        echo -e "${GREEN}${TICK}           replicaset found:$RS_COUNT\033[0m"
     fi
     while read -r line;
     do
@@ -396,7 +409,7 @@ rs () {
             echo -e "\033[1;33m! [WARNING] replicaset\033[0m" "$line"
             COUNT=$((COUNT+1))
         else
-            verbose && echo -e "\033[1;32m\xE2\x9C\x94 [OK]      replicaset\033[0m" "$line"
+            verbose && echo -e "${GREEN}${TICK} [OK]      replicaset\033[0m" "$line"
         fi
     done <<< "$RS_LIST"
     message replicaSets
@@ -404,7 +417,7 @@ rs () {
 
 ns_quota () {
     separator
-    echo -e "\033[1;32m\xE2\x9C\x94           namespace quota:\033[0m"
+    echo -e "${GREEN}${TICK}           namespace quota:\033[0m"
     kubectl describe ns "$NAMESPACE" | sed -n '/Resource Quotas/,/Resource Limits/{//!p;}' | indent 11
 }
 
@@ -416,18 +429,18 @@ velero_backup () {
     then
         printf "\033[1;35mVelero backups details: \033[0m\n"
         separator
-        printf "\033[1;32m\xE2\x9C\x94           velero backups found: \033[0m $(printf "$VELERO_BACKUP_LIST" | wc -l)\n"
+        printf "${GREEN}${TICK}           velero backups found: \033[0m $(echo "$VELERO_BACKUP_LIST" | wc -l)\n"
         while read -r line;
         do
             VELERO_BACKUP_STATUS="$(echo "$VELERO_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name == "'$line'") | .status.phase')"
             VELERO_BACKUP_NAMESPACE="$(echo "$VELERO_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name == "'$line'") | .spec.includedNamespaces[]')"
             if [[ "$VELERO_BACKUP_STATUS" != "Completed" ]];
             then
-                printf "\033[1;33m! [WARNING] backup\033[0m $line  status: \033[1;31m$VELERO_BACKUP_STATUS\033[0m for namespace $VELERO_BACKUP_NAMESPACE\n"
+                printf "\033[1;33m! [WARNING] backup\033[0m $line  status: ${RED}$VELERO_BACKUP_STATUS\033[0m for namespace $VELERO_BACKUP_NAMESPACE\n"
                 echo "$VELERO_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name == "'$line'") | .status' | indent 16
                 COUNT=$((COUNT+1))
             else
-                verbose && printf "\033[1;32m\xE2\x9C\x94 [OK]      backup\033[0m $line status: \033[1;32m$VELERO_BACKUP_STATUS\033[0m for namespace $VELERO_BACKUP_NAMESPACE\n"
+                verbose && printf "${GREEN}${TICK} [OK]      backup\033[0m $line status: ${GREEN}$VELERO_BACKUP_STATUS\033[0m for namespace $VELERO_BACKUP_NAMESPACE\n"
             fi
         done <<< "$VELERO_BACKUP_LIST"
     fi
@@ -452,12 +465,10 @@ openebs_component_pod () {
     do
         COMPONENT_POD_NAME="$line"
         COMPONENT_POD_STATUS="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.name=="'$COMPONENT_POD_NAME'") | .status.phase')"
-        COMPONENT_POD_CONTAINER_STATUS="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.name=="'$COMPONENT_POD_NAME'") | .status.containerStatuses[]? | .ready')"
-        COMPONENT_POD_CONTAINER_RESTART_COUNT="$(echo "$OPENEBS_JSON" | jq -rc '.items[] | select(.metadata.name=="'$COMPONENT_POD_NAME'") | .status.containerStatuses[]? | .restartCount')"
-
-        if [[ "$COMPONENT_POD_STATUS" == "Running" && ! "$COMPONENT_POD_CONTAINER_STATUS" =~ "false" && ! "$COMPONENT_POD_CONTAINER_RESTART_COUNT" =~ ^[1-9]+$ ]];
+        COMPONENT_POD_RESTART_COUNT="$(echo "$POD_DETAIL" | grep "$COMPONENT_POD_NAME" | awk '{print $4}')"
+        if (( ! "$COMPONENT_POD_RESTART_COUNT" >= 1 )) && [[ "$COMPONENT_POD_STATUS" == "Running" ]];
         then
-            echo -e "\033[1;32m\xE2\x9C\x94 [OK]      pod\033[0m" "$(echo "$POD_DETAIL" | grep "$COMPONENT_POD_NAME" | awk '{$(NF)="";$(NF-1)="";print $0}')"
+            echo -e "${GREEN}${TICK} [OK]      pod\033[0m" "$(echo "$POD_DETAIL" | grep "$COMPONENT_POD_NAME" | awk '{$(NF)="";$(NF-1)="";print $0}')"
             [[ "$COMPONENT_POD_NAME" =~ "target" ]] && data_plane_relation | indent 12
         else
             echo -e "\033[1;33m! [WARNING] pod\033[0m" "$(echo "$POD_DETAIL" | grep "$COMPONENT_POD_NAME" | awk '{$(NF)="";$(NF-1)="";print $0}')"
@@ -473,7 +484,7 @@ openebs_control_plane () {
     printf "\033[1;32mChecking control plane components for OpenEBS..\033[0m\n"
     OPENEBS_CONTROL_PLANE_LIST="$(echo "$OPENEBS_JSON" | jq -r '.items[].metadata.labels."openebs.io\/component-name"|select(.!=null)' | awk '!seen[$0]++')"
     OPENEBS_CONTROL_PLANE_PODS_TOTAL="$(echo "$OPENEBS_JSON" | jq -r '.items[].metadata.labels."openebs.io\/component-name"|select(.!=null)' | wc -l)"
-    printf "\033[1;32m\xE2\x9C\x94           control plane components found: \033[0m $(printf "$OPENEBS_CONTROL_PLANE_LIST" | wc -l)" "($OPENEBS_CONTROL_PLANE_PODS_TOTAL pods)\n"
+    printf "${GREEN}${TICK}           control plane components found: \033[0m $(echo "$OPENEBS_CONTROL_PLANE_LIST" | wc -l)" "($OPENEBS_CONTROL_PLANE_PODS_TOTAL pods)\n"
     separator
     while read -r line;
     do
@@ -495,7 +506,7 @@ openebs_data_plane () {
     JIVA_CONTROLLER="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels."openebs.io\/controller"=="jiva-controller") | .metadata.name')"
     JIVA_REPLICA="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels."openebs.io\/replica"=="jiva-replica") | .metadata.name')"
     NFS_PROVISIONER="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels.app=="openebs-nfs-provisioner") | .metadata.name')"
-    echo -e "\033[1;32m\xE2\x9C\x94           date plane components found: 5\033[0m"
+    echo -e "${GREEN}${TICK}           date plane components found: 5\033[0m"
 
     data_plane_comp_details () {
         if [[ "$1" != "" ]];
@@ -525,7 +536,7 @@ openebs_sp () {
     printf "\033[1;35mStorage pools:\033[0m\n"
     OPENEBS_SP_JSON="$(kubectl get sp -o json)"
     OPENEBS_SP_LIST="$(echo "$OPENEBS_SP_JSON" | jq -r '.items[].metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           storage pools found:\033[0m $(printf "$OPENEBS_SP_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           storage pools found:\033[0m $(echo "$OPENEBS_SP_LIST" | wc -l)\n"
     while read -r line;
     do
         OPENEBS_SP_NAME="$line"
@@ -539,7 +550,7 @@ openebs_spc () {
     printf "\033[1;35mStorage pool claims:\033[0m\n"
     OPENEBS_SPC_JSON="$(kubectl get spc -o json)"
     OPENEBS_SPC_LIST="$(echo "$OPENEBS_SPC_JSON" | jq -r '.items[].metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           storagepool claims found:\033[0m $(echo "$OPENEBS_SPC_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           storagepool claims found:\033[0m $(echo "$OPENEBS_SPC_LIST" | wc -l)\n"
     while read -r line;
     do
         OPENEBS_SPC_NAME="$line"
@@ -553,8 +564,8 @@ openebs_sc () {
     printf "\033[1;35mStorage class:\033[0m\n"
     OPENEBS_SC_JSON="$(kubectl get sc -o json)"
     OPENEBS_SC_LIST="$(echo "$OPENEBS_SC_JSON" | jq -r '.items[].metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           storage-class found:\033[0m $(printf "$OPENEBS_SC_LIST" | wc -l)\n"
-    printf "\033[1;30m%-25s %-30s %-15s %-10s\033[0m\n" Name Provisioner reclaimPolicy PVCs| indent 12
+    printf "${GREEN}${TICK}           storage-class found:\033[0m $(echo "$OPENEBS_SC_LIST" | wc -l)\n"
+    printf "${BOLD}%-25s %-30s %-15s %-10s\033[0m\n" Name Provisioner reclaimPolicy PVCs| indent 12
     OPENEBS_PV_JSON="$(kubectl get pvc -A -o json)"
     while read -r line;
     do
@@ -563,7 +574,7 @@ openebs_sc () {
         OPENEBSE_SC_DETAIL="$(echo "$OPENEBS_SC_JSON" | jq -r '.items[] | select(.metadata.name=="'$OPENEBS_SC_NAME'") | .reclaimPolicy')"
         OPENEBS_SC_PV_LIST="$(echo "$OPENEBS_PV_JSON" | jq -r '.items[] | select(.metadata.annotations."volume.beta.kubernetes.io\/storage-class"=="'$OPENEBS_SC_NAME'") | .metadata.name')"
 
-        printf "\033[0;32m%-25s %-30s %-15s %-5s\033[0m\n" "$OPENEBS_SC_NAME" "$OPENEBS_SC_PROVISIONER" "$OPENEBSE_SC_DETAIL" "$(printf "$OPENEBS_SC_PV_LIST" | wc -l)"| indent 12
+        printf "\033[0;32m%-25s %-30s %-15s %-5s\033[0m\n" "$OPENEBS_SC_NAME" "$OPENEBS_SC_PROVISIONER" "$OPENEBSE_SC_DETAIL" "$(echo "$OPENEBS_SC_PV_LIST" | wc -l)"| indent 12
         if [[ "$OPENEBS_SC_PV_LIST" != "" ]] && verbose ;
         then
             echo "PVCs found for this storage class:"  | indent 19
@@ -577,7 +588,7 @@ openebs_csp () {
     printf "\033[1;35mStorage cStorPool:\033[0m\n"
     CSP_JSON="$(kubectl get csp -o json)"
     CSP_LIST="$(echo "$CSP_JSON" | jq -r '.items[].metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           cStorPool found:\033[0m $(echo "$CSP_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           cStorPool found:\033[0m $(echo "$CSP_LIST" | wc -l)\n"
     printf "NAME         USED    FREE   TOTAL  STATUS    TYPE      AGE" | indent 22
     [[ "$CSP_LIST" != "" ]] && csp_check
 }
@@ -587,7 +598,7 @@ openebs_cv () {
     printf "\033[1;35mStorage cstorvolumes:\033[0m\n"
     CV_STATUS_JSON="$(kubectl get cstorvolumes -A -o json)"
     CV_LIST="$(echo "$CV_STATUS_JSON" | jq -r '.items[].metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           cStorVolumes found:\033[0m $(echo "$CV_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           cStorVolumes found:\033[0m $(echo "$CV_LIST" | wc -l)\n"
     OPENEBS_PV_JSON="$(kubectl get pv -o json -n openebs)"
     if [[ "$CV_LIST" != "" ]];
     then
@@ -604,7 +615,7 @@ openebs_cvr () {
     separator
     CVR_STATUS_JSON="$(kubectl get cvr -A -o json)"
     CVR_LIST="$(echo "$CVR_STATUS_JSON" | jq -r '.items[] | .metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           cStorVolumeReplicas found:\033[0m $(printf "$CVR_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           cStorVolumeReplicas found:\033[0m $(echo "$CVR_LIST" | wc -l)\n"
     if [[ "$CVR_LIST" != "" ]];
     then
         CVR_GET_DETAILS="$(kubectl get cvr -A --no-headers)"
@@ -621,7 +632,7 @@ openebs_cvr () {
                 echo -e "\033[0;32mPV Name\033[0m:" "$CVR_PV_NAME" | indent 31
                 if [[ "$CVR_PV_DETAIL" != "" ]];
                 then
-                    echo -e "\033[1;30m$CVR_PV_DETAIL\033[0m" | indent 31
+                    echo -e "${BOLD}$CVR_PV_DETAIL\033[0m" | indent 31
                 else
                     echo -e "\033[1;30mPVC Name: null\033[0m" | indent 31
                 fi
@@ -637,7 +648,7 @@ openebs_blockdevices () {
     printf "\033[1;35mBlock devices:\033[0m\n"
     BLOCK_DEVICE_JSON="$(kubectl get blockdevices -n openebs -o json)"
     BLOCK_DEVICE_LIST="$(echo "$BLOCK_DEVICE_JSON" | jq -r '.items[] | .metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           blockdevices found:\033[0m $(printf "$BLOCK_DEVICE_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           blockdevices found:\033[0m $(echo "$BLOCK_DEVICE_LIST" | wc -l)\n"
     if [[ "$BLOCK_DEVICE_LIST" != "" ]];
     then
         while read -r line;
@@ -648,7 +659,7 @@ openebs_blockdevices () {
             BLOCK_DEVICE_HOST="$(echo "$BLOCK_DEVICE_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$BLOCK_DEVICE_NAME'")) | .metadata.labels."kubernetes.io\/hostname"')"
             if [[ "$BLOCK_DEVICE_STATUS" == "Active" && "$BLOCK_DEVICE_CLAIM_STATE" == "Claimed" ]];
             then
-                printf "\033[1;32m\xE2\x9C\x94%-10s %-45s\033[0m %-20s %-8s %-10s\n" " [OK]" "$BLOCK_DEVICE_NAME" "$BLOCK_DEVICE_HOST" "$BLOCK_DEVICE_STATUS" "$BLOCK_DEVICE_CLAIM_STATE"
+                printf "${GREEN}${TICK}%-10s %-45s\033[0m %-20s %-8s %-10s\n" " [OK]" "$BLOCK_DEVICE_NAME" "$BLOCK_DEVICE_HOST" "$BLOCK_DEVICE_STATUS" "$BLOCK_DEVICE_CLAIM_STATE"
             else
                 printf "\033[1;33m%-11s %-45s\033[0m %-20s %-8s %-10s\n" "! [WARNING]" "$BLOCK_DEVICE_NAME" "$BLOCK_DEVICE_HOST" "$BLOCK_DEVICE_STATUS" "$BLOCK_DEVICE_CLAIM_STATE"
                 COUNT=$((COUNT+1))
@@ -664,7 +675,7 @@ openebs_blockdeviceclaims () {
     printf "\033[1;35mBlock device claims:\033[0m\n"
     BLOCK_DEVICE_CLAIM_JSON="$(kubectl get blockdeviceclaims -n openebs -o json)"
     BLOCK_DEVICE_CLAIM_LIST="$(echo "$BLOCK_DEVICE_CLAIM_JSON" | jq -r '.items[] | .metadata.name')"
-    printf "\033[1;32m\xE2\x9C\x94           blockdevices found:\033[0m $(printf "$BLOCK_DEVICE_CLAIM_LIST" | wc -l)\n"
+    printf "${GREEN}${TICK}           blockdevices found:\033[0m $(echo "$BLOCK_DEVICE_CLAIM_LIST" | wc -l)\n"
     if [[ "$BLOCK_DEVICE_CLAIM_LIST" != "" ]];
     then
         while read -r line;
@@ -676,10 +687,10 @@ openebs_blockdeviceclaims () {
             BLOCK_DEVICE_NAME="$(echo "$BLOCK_DEVICE_CLAIM_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$BLOCK_DEVICE_CLAIM_NAME'")) | .spec.blockDeviceName')"
             if [[ "$BLOCK_DEVICE_CLAIM_STATUS" == "Bound" ]];
             then
-                verbose && printf "\033[1;32m\xE2\x9C\x94%-10s %-45s\033[0m %-20s %-8s %-10s\n" " [OK]" "$BLOCK_DEVICE_CLAIM_NAME" "$BLOCK_DEVICE_CLAIM_HOST" "$BLOCK_DEVICE_CLAIM_STATUS" "$BLOCK_DEVICE_CLAIM_SPC" \
+                verbose && printf "${GREEN}${TICK}%-10s %-45s\033[0m %-20s %-8s %-10s\n" " [OK]" "$BLOCK_DEVICE_CLAIM_NAME" "$BLOCK_DEVICE_CLAIM_HOST" "$BLOCK_DEVICE_CLAIM_STATUS" "$BLOCK_DEVICE_CLAIM_SPC" \
                 && printf "Block device name: $BLOCK_DEVICE_NAME" | indent 12
             else
-                printf "\033[1;32m\xE2\x9C\x94%-10s %-45s\033[0m %-20s %-8s %-10s\n" " [OK]" "$BLOCK_DEVICE_CLAIM_NAME" "$BLOCK_DEVICE_CLAIM_HOST" "$BLOCK_DEVICE_CLAIM_STATUS" "$BLOCK_DEVICE_CLAIM_SPC"
+                printf "${GREEN}${TICK}%-10s %-45s\033[0m %-20s %-8s %-10s\n" " [OK]" "$BLOCK_DEVICE_CLAIM_NAME" "$BLOCK_DEVICE_CLAIM_HOST" "$BLOCK_DEVICE_CLAIM_STATUS" "$BLOCK_DEVICE_CLAIM_SPC"
                 verbose && printf "Block device name: $BLOCK_DEVICE_NAME" | indent 12
                 COUNT=$((COUNT+1))
             fi
@@ -694,8 +705,8 @@ cstorbackups () {
     printf "\033[1;35mcStor backups:\033[0m\n"
     CSTOR_BACKUP_JSON="$(kubectl get cstorbackups -n openebs -o json)"
     CSTOR_BACKUP_LIST="$(echo "$CSTOR_BACKUP_JSON" | jq -r '.items[] | .metadata.name')"
-    CSTOR_BACKUP_COUNT="$(printf "$CSTOR_BACKUP_LIST" | wc -l)"
-    printf "\033[1;32m\xE2\x9C\x94           cstorbackups found:\033[0m $CSTOR_BACKUP_COUNT\n"
+    CSTOR_BACKUP_COUNT="$(echo "$CSTOR_BACKUP_LIST" | wc -l)"
+    printf "${GREEN}${TICK}           cstorbackups found:\033[0m $CSTOR_BACKUP_COUNT\n"
     if [[ "$CSTOR_BACKUP_LIST" != "" ]];
     then
         while read -r line;
@@ -705,10 +716,10 @@ cstorbackups () {
             CSTOR_SPEC="$(echo "$CSTOR_BACKUP_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$CSTOR_BACKUP_NAME'")) | .spec')"
             if [[ "$CSTOR_BACKUP_STATUS" == "Done" ]];
             then
-                verbose && printf "\033[1;32m\xE2\x9C\x94%-10s %-75s %-10s\033[0m\n" " [OK]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS" \
+                verbose && printf "${GREEN}${TICK}%-10s %-75s %-10s\033[0m\n" " [OK]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS" \
                 && echo "$CSTOR_SPEC" | indent 12
             else
-                printf "\033[1;32m\xE2\x9C\x94%-10s %-75s %-10s\033[0m\n" " [OK]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS"
+                printf "${GREEN}${TICK}%-10s %-75s %-10s\033[0m\n" " [OK]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS"
                 verbose && echo "$CSTOR_SPEC" | indent 12
                 COUNT=$((COUNT+1))
             fi
