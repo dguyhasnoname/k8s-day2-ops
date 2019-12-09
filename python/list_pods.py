@@ -105,18 +105,26 @@ def running_pod_cont_restart_reason(i,verbose,namespace):
         for c in i.status.container_statuses:
             if c.restart_count > 0:
                 print("\tContainer\t: %s" % (c.name))
-                print("\texitCode\t: %s" % (c.last_state.terminated.exit_code))
-                print("\treason\t\t: %s" % (c.last_state.terminated.reason))
-                print("\tstartedAt\t: %s" % (c.last_state.terminated.started_at))
-                print("\tfinishedAt\t: %s" % (c.last_state.terminated.finished_at))
+                if c.last_state.terminated:
+                    print("\texitCode\t: %s" % (c.last_state.terminated.exit_code))
+                    print("\treason\t\t: %s" % (c.last_state.terminated.reason))
+                    print("\tstartedAt\t: %s" % (c.last_state.terminated.started_at))
+                    print("\tfinishedAt\t: %s" % (c.last_state.terminated.finished_at))
+                else:
+                    print("\tLast state of container was not found!\t")
                 separator()
                 if verbose == '-v':
                     container_logs(i,c,namespace)
 
 def resources(i):
     for c in i.spec.containers:
-        resources = c.resources.requests
-        print("\tCPU/Mem requests: %s/%s" %(resources[u'cpu'], resources[u'memory']))
+        res = c.resources.requests
+        if res is not None:
+            #pprint(c.resources.requests)
+            for key in res.keys():
+                print("\t%s\t\t: %s" %(key, res[key]))
+            #      print("\tCPU/Mem requests: %s/%s" %(res[u'cpu'], res[u'memory']))
+
 
 def pods():
     separator()
@@ -180,13 +188,16 @@ def replicaset(namespace):
 def namespace_events(namespace):
     ns_events = v1.list_namespaced_event(namespace)
     firstTime = []
+    last_event = ''
     for e in ns_events.items:
         if e.type != 'Normal':
             if firstTime == []:
                 print("\033[1;35mEvents found in namespace which needs attention: \033[0m%s" % (namespace))
                 separator()
                 firstTime.append('Not Empty')
-            print("\033[1;31m%s\033[0m\t%s" %(e.type, e.message))
+            if e.message != last_event:
+                print("\033[1;31m%s\033[0m\t%s" %(e.type, e.message))
+            last_event = e.message
 
 def verify_namespace(namespace):
     try:
