@@ -152,8 +152,10 @@ def ingress(ing_list,namespace,pod_label):
         label_selector = pod_label[u'app']
     elif u'component' in pod_label:
         label_selector = pod_label[u'component']
-    else:
+    elif u'k8s-app' in pod_label:
         label_selector = pod_label[u'k8s-app']
+    else:
+        label_selector = ""
     #pprint(label_selector)
     #ing_list = v3.list_namespaced_ingress(namespace)
     for i in ing_list.items:
