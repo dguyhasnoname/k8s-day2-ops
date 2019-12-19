@@ -15,6 +15,7 @@ start_time = time.time()
 config.load_kube_config()
 v1 = client.CoreV1Api()
 v2 = client.AppsV1Api()
+v3 = client.ExtensionsV1beta1Api()
 
 def separator():
     print  ""
@@ -65,9 +66,12 @@ def container_statuses(i):
             elif c.state.waiting:
                 status = c.state.waiting.reason
                 message = c.state.waiting.message
-            else:
+            elif c.state.terminated.exit_code:
                 status = 'Terminating'
                 message = c.state.terminated.exit_code
+            else:
+                status = ''
+                message = ''
     else:
         for c in i.spec.containers:
             total_container_count += 1
@@ -87,24 +91,32 @@ def container_logs(i,c,namespace):
     namespace = namespace
     output = ''
     last_line = ''
+    prev_cont_logs = ''
     error_string = [ 'error', 'fail', 'kill', 'timeout', 'denied', 'retry', \
         'unexpected', 'IOException', 'refuse', 'warn', 'exception', 'terminate' ]
-    prev_cont_logs = v1.read_namespaced_pod_log(name, namespace, container=container, \
-        previous=True, tail_lines=10, timestamps=True)
-    print("\t\033[1;33mPrevious container logs for container:\033[0m %s" % (container))
-    for line in iter(prev_cont_logs.splitlines()):
-        for l in error_string:
-            if l.lower() in line.lower():
-                if last_line != line:
-                    print(textwrap.fill(line, 100, initial_indent=("\t"),subsequent_indent=("\t")))
-                last_line = line
+    try:
+        prev_cont_logs = v1.read_namespaced_pod_log(name, namespace, container=container, \
+            previous=True, tail_lines=10, timestamps=True)
+    except ApiException as e:
+        pass
+
+    if prev_cont_logs != '':
+        print("\t\033[1;33mPrevious container logs for container:\033[0m %s" % (container))
+        for line in iter(prev_cont_logs.splitlines()):
+            for l in error_string:
+                if l.lower() in line.lower():
+                    if last_line != line:
+                        print(textwrap.fill(line, 100, initial_indent=("\t"),subsequent_indent=("\t")))
+                    last_line = line
+    else:
+        print("\t\033[1;33mNo errors found in logs of previous instance of container:\033[0m %s" % (container))
 
 
 def running_pod_cont_restart_reason(i,verbose,namespace):
     if i.status.container_statuses:
         for c in i.status.container_statuses:
             if c.restart_count > 0:
-                print("\tContainer\t: %s" % (c.name))
+                print("\tcontainer\t: %s" % (c.name))
                 if c.last_state.terminated:
                     print("\texitCode\t: %s" % (c.last_state.terminated.exit_code))
                     print("\treason\t\t: %s" % (c.last_state.terminated.reason))
@@ -123,12 +135,36 @@ def resources(i):
             #pprint(c.resources.requests)
             for key in res.keys():
                 print("\t%s\t\t: %s" %(key, res[key]))
-            #      print("\tCPU/Mem requests: %s/%s" %(res[u'cpu'], res[u'memory']))
 
+# def svc(namespace,pod_label):
+#     svc_list = v1.list_namespaced_service(namespace)
+#     for i in svc_list.items:
+#         if u'app' in pod_label:
+#             label_selector = pod_label[u'app']
+#             pprint(label_selector)
+#             if i.spec.selector[u'app'] == label_selector:
+#                 print("\tservice name\t: %s" % (i.metadata.name))
+#         else:
+#             print("\tservice name\t: kube-dns, coreos-prometheus-operator-coredns" )
+
+def ingress(ing_list,namespace,pod_label):
+    if u'app' in pod_label:
+        label_selector = pod_label[u'app']
+    elif u'component' in pod_label:
+        label_selector = pod_label[u'component']
+    else:
+        label_selector = pod_label[u'k8s-app']
+    #pprint(label_selector)
+    #ing_list = v3.list_namespaced_ingress(namespace)
+    for i in ing_list.items:
+        if i.metadata.labels[u'app'] == label_selector:
+            for j in i.spec.rules:
+                print("\tingress\t\t: %s" %(j.host))
 
 def pods():
     separator()
     pod_list = v1.list_namespaced_pod(namespace, watch=False)
+    ing_list = v3.list_namespaced_ingress(namespace)
     print "\033[1;35mListing pods in namespace: \033[0m", namespace
     separator()
     if pod_list.items:
@@ -136,6 +172,7 @@ def pods():
             pod_name = i.metadata.name
             creation_time = i.metadata.creation_timestamp
             total_age = age(creation_time)
+            pod_label = i.metadata.labels
 
             cont_status = container_statuses(i)
             if any('False' in t for t in cont_status['pod_status']) or cont_status['status'] == 'Evicted':
@@ -143,7 +180,7 @@ def pods():
                 % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
                 cont_status['rc'], total_age, i.spec.node_name))
                 init_container_statuses(i)
-                print("\tCotainer name\t: %s" %(cont_status['container_name']))
+                print("\tcontainer name\t: %s" %(cont_status['container_name']))
                 print("\texitCode/reason\t: %s" %(cont_status['reason']))
                 resources(i)
             else:
@@ -152,6 +189,8 @@ def pods():
                 cont_status['rc'], total_age, i.spec.node_name))
                 running_pod_cont_restart_reason(i,verbose,namespace)
 
+            #svc(namespace,pod_label)
+            ingress(ing_list,namespace,pod_label)
             for p in i.spec.volumes:
                 if p.persistent_volume_claim:
                     print("\tPVC name\t: %-65s" % (p.persistent_volume_claim.claim_name))
@@ -196,7 +235,7 @@ def namespace_events(namespace):
                 separator()
                 firstTime.append('Not Empty')
             if e.message != last_event:
-                print("\033[1;31m%s\033[0m\t%s" %(e.type, e.message))
+                print("\033[1;31m%s\033[0m\t%s\%s\t%s" %(e.type, e.involved_object.kind, e.involved_object.name, e.message))
             last_event = e.message
 
 def verify_namespace(namespace):
