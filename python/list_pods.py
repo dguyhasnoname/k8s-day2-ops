@@ -24,7 +24,7 @@ def usage():
     print "\033[1;33mUsage:\033[0m"
     print "\033[0;33mexport KUBECONFIG before running the script.\033[0m"
     print "\033[0;33mpython list_pods.py <namespace>\t\t: prints pod details and possible issues in a namespace.\033[0m"
-    print "\033[0;33mpython list_pods.py <namespace> -v\t: prints pod details and events in namespace.\033[0m"
+    print "\033[0;33mpython list_pods.py <namespace> -v\t: debugs issues with higher level of details in a namespace.\033[0m"
     sys.exit(1)
 
 def age(creation_time):
@@ -60,18 +60,16 @@ def container_statuses(i):
 
         for c in i.status.container_statuses:
             total_container_count += 1
+            #pprint(i)
             if c.ready:
                 running_container_count += 1
                 status = 'Running'
-            elif c.state.waiting:
+            elif c.state.waiting is not None:
                 status = c.state.waiting.reason
                 message = c.state.waiting.message
-            elif c.state.terminated.exit_code:
+            elif c.state.terminated  is not None:
                 status = 'Terminating'
                 message = c.state.terminated.exit_code
-            else:
-                status = ''
-                message = ''
     else:
         for c in i.spec.containers:
             total_container_count += 1
@@ -88,7 +86,6 @@ def container_statuses(i):
 def container_logs(i,c,namespace):
     name = i.metadata.name
     container = c.name
-    namespace = namespace
     output = ''
     last_line = ''
     prev_cont_logs = ''
@@ -108,6 +105,7 @@ def container_logs(i,c,namespace):
                     if last_line != line:
                         print(textwrap.fill(line, 100, initial_indent=("\t"),subsequent_indent=("\t")))
                     last_line = line
+        print(" ")
     else:
         print("\t\033[1;33mNo errors found in logs of previous instance of container:\033[0m %s" % (container))
 
@@ -118,10 +116,9 @@ def running_pod_cont_restart_reason(i,verbose,namespace):
             if c.restart_count > 0:
                 print("\tcontainer\t: %s" % (c.name))
                 if c.last_state.terminated:
-                    print("\texitCode\t: %s" % (c.last_state.terminated.exit_code))
-                    print("\treason\t\t: %s" % (c.last_state.terminated.reason))
-                    print("\tstartedAt\t: %s" % (c.last_state.terminated.started_at))
-                    print("\tfinishedAt\t: %s" % (c.last_state.terminated.finished_at))
+                    print("\texitCode\t: %s\n\treason\t\t: %s\n\tstartedAt\t: %s\n\tfinishedAt\t: %s"\
+                     % (c.last_state.terminated.exit_code, c.last_state.terminated.reason, \
+                        c.last_state.terminated.started_at, c.last_state.terminated.finished_at))
                 else:
                     print("\tLast state of container was not found!\t")
                 separator()
@@ -156,8 +153,6 @@ def ingress(ing_list,namespace,pod_label):
         label_selector = pod_label[u'k8s-app']
     else:
         label_selector = ""
-    #pprint(label_selector)
-    #ing_list = v3.list_namespaced_ingress(namespace)
     for i in ing_list.items:
         if i.metadata.labels[u'app'] == label_selector:
             for j in i.spec.rules:
@@ -237,7 +232,8 @@ def namespace_events(namespace):
                 separator()
                 firstTime.append('Not Empty')
             if e.message != last_event:
-                print("\033[1;31m%s\033[0m\t%s\%s\t%s" %(e.type, e.involved_object.kind, e.involved_object.name, e.message))
+                print("\033[1;31m%s\033[0m\t%s\%s\t%s" %(e.type, \
+                e.involved_object.kind, e.involved_object.name, e.message))
             last_event = e.message
 
 def verify_namespace(namespace):
@@ -259,7 +255,7 @@ def main():
     else:
         verify_namespace(namespace)
     if verbose == '-v':
-        replicaset(namespace)
+        #replicaset(namespace)
         pods()
         pvc()
         namespace_events(namespace)
