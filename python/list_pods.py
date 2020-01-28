@@ -135,14 +135,25 @@ def resources(i):
 
 # def svc(namespace,pod_label):
 #     svc_list = v1.list_namespaced_service(namespace)
+#     pprint(pod_label)
 #     for i in svc_list.items:
-#         if u'app' in pod_label:
-#             label_selector = pod_label[u'app']
-#             pprint(label_selector)
-#             if i.spec.selector[u'app'] == label_selector:
+#         #pprint(i)
+#         type(i)
+#         if pod_label[u'k8s-app']:
+#             if pod_label[u'k8s-app'] == 'kube-dns':
 #                 print("\tservice name\t: %s" % (i.metadata.name))
-#         else:
-#             print("\tservice name\t: kube-dns, coreos-prometheus-operator-coredns" )
+#                 break
+#         elif pod_label[u'app']:
+#             if i.spec.selector[u'app'] == pod_label[u'app']:
+#                 print("\tservice name\t: %s" % (i.metadata.name))
+    # for i in svc_list.items:
+    #     if u'app' in pod_label:
+    #         label_selector = pod_label[u'app']
+    #         #pprint(label_selector)
+    #         if i.spec.selector[u'app'] == label_selector:
+    #             print("\tservice name\t: %s" % (i.metadata.name))
+    #     else:
+    #         print("\tservice name\t: kube-dns, coreos-prometheus-operator-coredns" )
 
 def ingress(ing_list,namespace,pod_label):
     if u'app' in pod_label:
@@ -177,8 +188,8 @@ def pods():
                 % (i.metadata.name, cont_status['rcc'], cont_status['tcc'], cont_status['status'], \
                 cont_status['rc'], total_age, i.spec.node_name))
                 init_container_statuses(i)
-                print("\tcontainer name\t: %s" %(cont_status['container_name']))
-                print("\texitCode/reason\t: %s" %(cont_status['reason']))
+                print("\tcontainer name\t: %s\n\texitCode/reason\t: %s" \
+                    %(cont_status['container_name'],  cont_status['reason']))
                 resources(i)
             else:
                 print("\033[1;32m\xE2\x9C\x94\033[0m \033[1;30m%-65s %s/%-2s\033[0m \033[1;32m%-10s\033[0m %-3s %-10s %-20s" \
@@ -255,7 +266,7 @@ def main():
     else:
         verify_namespace(namespace)
     if verbose == '-v':
-        #replicaset(namespace)
+        replicaset(namespace)
         pods()
         pvc()
         namespace_events(namespace)
