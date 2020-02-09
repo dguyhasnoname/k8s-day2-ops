@@ -103,17 +103,17 @@ csp_check () {
 }
 
 cstorvolume_check () {
-    COUNT=0
+    local COUNT=0
     replica_check () {
         if [[ "$NAMESPACE" != "openebs" ]];
         then
             verbose && echo "$CV_STATUS_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$PV_NAME'")) | "Specs:", .spec, "Replica status:", .status.replicaStatuses[]' | indent 24
         else
             CV_PV_NAME="$(echo "$OPENEBS_PV_JSON" | jq -r '.items[] | select(.metadata.name=="'$CV_NAME'") | .metadata.name')"
-            CV_PV_DETAIL="$(echo "$OPENEBS_PV_JSON" | jq -rj '.items[] | select(.metadata.name=="'$CV_PV_NAME'") | .spec | "PVC Name: ", .claimRef.name, "/", .accessModes[]')"
-            echo -e "\033[1;30mPV Name:\033[0m $CV_PV_NAME" | indent 24
+            CV_PV_DETAIL="$(echo "$OPENEBS_PV_JSON" | jq -rj '.items[] | select(.metadata.name=="'$CV_PV_NAME'") | .spec | "PVC Name:   ", .claimRef.name, " | ", .accessModes[]')"
+            #echo -e "\033[1;30mPV Name:\033[0m $CV_PV_NAME" | indent 24
             echo -e "$CV_PV_DETAIL" | indent 24
-            verbose && echo "$CV_STATUS_JSON"| jq -r '.items[] | select(.metadata.name | contains("'$CV_NAME'")) | "Specs:", .spec, "Replica status:", .status.replicaStatuses[]' | indent 24
+            #verbose && echo "$CV_STATUS_JSON"| jq -r '.items[] | select(.metadata.name | contains("'$CV_NAME'")) | "Specs:", .spec, "Replica status:", .status.replicaStatuses[]' | indent 24
         fi
     }
     if [[ "$NAMESPACE" != "openebs" ]];
@@ -122,7 +122,7 @@ cstorvolume_check () {
     else
         CV_STATUS="$(echo "$CV_STATUS_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$CV_NAME'")) | .status.phase' )"
     fi
-    CV_GET_DETAILS="$(kubectl get cstorvolume -A)"
+    CV_GET_DETAILS="$1"
     if [[ "$CV_STATUS" != "Healthy" ]];
     then
         echo -e "${RED}\xE2\x9D\x8C[ERROR]    CStorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
@@ -134,8 +134,8 @@ cstorvolume_check () {
         replica_check
         COUNT=$((COUNT+1))
     else
-        echo -e "${GREEN}${TICK} [OK]      CstorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
-        replica_check
+        verbose && echo -e "${GREEN}${TICK} [OK]      CstorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
+        verbose && replica_check
     fi
 }
 
@@ -150,13 +150,13 @@ cvr_check () {
         echo -e "\033[1;33m! [WARNING] CStorVolumeReplica\033[0m" "$CVR_DETAIL"
         COUNT=$((COUNT+1))
     else
-        echo -e "${GREEN}${TICK} [OK]      CstorVolumeReplica\033[0m" "$CVR_DETAIL"
+        verbose && echo -e "${GREEN}${TICK} [OK]      CstorVolumeReplica\033[0m" "$CVR_DETAIL"
     fi
 }
 
 peristent_storage () {
     separator
-    COUNT=0
+    local COUNT=0
     PVC_LIST="$(kubectl get pvc -n "$NAMESPACE" -o json | jq -r '.items[].metadata.name')"
     #loop over pvc
     if [[ "$PVC_LIST" == "" ]];
@@ -184,7 +184,7 @@ peristent_storage () {
                 PV_NAME="$line"
                 PV_STATUS="$(kubectl get pv "$PV_NAME" -o json | jq -r '.status.phase')"
                 echo -e "\033[0;32mPV $PV_NAME: $PV_STATUS\033[0m" | indent 6
-                COUNT=0
+                local COUNT=0
                 pv_check | indent 6
 
                 CV_STATUS_JSON="$(kubectl get cstorvolume -A -o json)"
@@ -202,7 +202,7 @@ peristent_storage () {
                         CV_NAME="$line"
                         cstorvolume_check | indent 12
                     done <<< "$NS_CV_LIST"
-                    message cStorVolume | indent 12
+                    message "cStorVolume" | indent 12
                 fi
 
                 CVR_STATUS_JSON="$(kubectl get cvr -A -o json)"
@@ -219,7 +219,7 @@ peristent_storage () {
                         CVR_DETAIL="$(echo "$CVR_GET_DETAILS" | grep "$CVR_NAME" )"
                         cvr_check | indent 12
                     done <<< "$NS_CVR_LIST"
-                    message cStorVolumeReplica | indent 12
+                    message "cStorVolumeReplica" | indent 12
                 fi
             done <<< "$NAMESPACE_PV_LIST"
         done <<< "$PVC_LIST"
@@ -322,7 +322,7 @@ pod_state_terminating () {
 }
 
 pods () {
-    COUNT=0
+    local COUNT=0
     echo -e "\033[1;35mPod details:\033[0m"
     separator
     POD_LIST="$(kubectl get pods -o wide --no-headers -n "$NAMESPACE" 2> /dev/null)"
@@ -390,7 +390,7 @@ pods () {
 }
 
 rs () {
-    COUNT=0
+    local COUNT=0
     echo -e "\033[1;35mReplicaSet details:\033[0m"
     separator
     RS_LIST="$(kubectl get rs -n "$NAMESPACE" --no-headers | awk '{if($2!=0) print}' 2> /dev/null)"
@@ -455,18 +455,20 @@ openebs_component_pod () {
 
         if [[ "$TYPE" == "data" ]];
         then
-            echo -e "\033[0;32mPV:\033[0m" "$COMPONENT_POD_PV" | indent 4
-            echo -e "\033[0;32mPVC:\033[0m" "$COMPONENT_POD_PVC" | indent 4
-            echo -e "\033[0;32mStorage class:\033[0m" "$COMPONENT_POD_STORAGE_CLASS" | indent 4
+            #echo -e "\033[0;32mPV:\033[0m" "$COMPONENT_POD_PV" | indent 4
+            echo -e "\033[1;30mPVC:\033[0m" "$COMPONENT_POD_PVC" | indent 4
+            #echo -e "\033[0;32mStorage class:\033[0m" "$COMPONENT_POD_STORAGE_CLASS" | indent 4
         fi
     }
-    TYPE="$1"
+    TYPE="$2"
+    COMPONENT_POD_LIST="$1"
+
     while read -r line;
     do
         COMPONENT_POD_NAME="$line"
         COMPONENT_POD_STATUS="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.name=="'$COMPONENT_POD_NAME'") | .status.phase')"
         COMPONENT_POD_RESTART_COUNT="$(echo "$POD_DETAIL" | grep "$COMPONENT_POD_NAME" | awk '{print $4}')"
-        if (( ! "$COMPONENT_POD_RESTART_COUNT" >= 1 )) && [[ "$COMPONENT_POD_STATUS" == "Running" ]];
+        if (( "$COMPONENT_POD_RESTART_COUNT" < 1 )) && [[ "$COMPONENT_POD_STATUS" == "Running" ]];
         then
             echo -e "${GREEN}${TICK} [OK]      pod\033[0m" "$(echo "$POD_DETAIL" | grep "$COMPONENT_POD_NAME" | awk '{$(NF)="";$(NF-1)="";print $0}')"
             [[ "$COMPONENT_POD_NAME" =~ "target" ]] && data_plane_relation | indent 12
@@ -480,18 +482,19 @@ openebs_component_pod () {
 
 openebs_control_plane () {
     separator
-    COUNT=0
-    printf "\033[1;32mChecking control plane components for OpenEBS..\033[0m\n"
+
+    printf "\033[1;32mChecking control plane components for OpenEBS...\033[0m\n"
     OPENEBS_CONTROL_PLANE_LIST="$(echo "$OPENEBS_JSON" | jq -r '.items[].metadata.labels."openebs.io\/component-name"|select(.!=null)' | awk '!seen[$0]++')"
     OPENEBS_CONTROL_PLANE_PODS_TOTAL="$(echo "$OPENEBS_JSON" | jq -r '.items[].metadata.labels."openebs.io\/component-name"|select(.!=null)' | wc -l)"
     printf "${GREEN}${TICK}           control plane components found: \033[0m $(echo "$OPENEBS_CONTROL_PLANE_LIST" | wc -l)" "($OPENEBS_CONTROL_PLANE_PODS_TOTAL pods)\n"
     separator
     while read -r line;
     do
+        local COUNT=0
         COMPONENT_NAME="$line"
         COMPONENT_POD_LIST="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels."openebs.io\/component-name"=="'$COMPONENT_NAME'") | .metadata.name')"
         printf "\033[1;35m$line:\033[0m\n"
-        openebs_component_pod
+        openebs_component_pod "$COMPONENT_POD_LIST"
         separator
     done <<< "$OPENEBS_CONTROL_PLANE_LIST"
     message "control plane components"
@@ -499,8 +502,8 @@ openebs_control_plane () {
 
 openebs_data_plane () {
     separator
-    COUNT=0
-    printf "\033[1;32mChecking data plane components for OpenEBS..\033[0m\n"
+    local COUNT=0
+    printf "\033[1;32mChecking data plane components for OpenEBS...\033[0m\n"
     CSTOR_POOL_LIST="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels.app=="cstor-pool") | .metadata.name')"
     CSTOR_VOL_MANAGER="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels.app=="cstor-volume-manager") | .metadata.name')"
     JIVA_CONTROLLER="$(echo "$OPENEBS_JSON" | jq -r '.items[] | select(.metadata.labels."openebs.io\/controller"=="jiva-controller") | .metadata.name')"
@@ -514,14 +517,13 @@ openebs_data_plane () {
             COMPONENT_NAME="$2"
             COMPONENT_POD_LIST="$1"
             printf "\033[1;35m$COMPONENT_NAME: $(echo "$1" | wc -l)\033[0m\n"
-            openebs_component_pod "$3"
+            openebs_component_pod "$COMPONENT_POD_LIST" "$3"
             separator
         else
             printf "\033[1;33m! [WARNING] $COMPONENT_NAME\033[0m not found.\n"
             openebs_component_pod "$3"
             separator
         fi
-        message "$COMPONENT_NAME"
     }
 
     data_plane_comp_details "$CSTOR_POOL_LIST" cstor-pool
@@ -529,6 +531,7 @@ openebs_data_plane () {
     data_plane_comp_details "$JIVA_CONTROLLER" jiva-controller
     data_plane_comp_details "$JIVA_REPLICA" jiva-replica
     data_plane_comp_details "$NFS_PROVISIONER" openebs-nfs-provisioner
+    message "data plane components"
 }
 
 openebs_sp () {
@@ -595,24 +598,27 @@ openebs_csp () {
 
 openebs_cv () {
     separator
+    local COUNT=0
     printf "\033[1;35mStorage cstorvolumes:\033[0m\n"
     CV_STATUS_JSON="$(kubectl get cstorvolumes -A -o json)"
     CV_LIST="$(echo "$CV_STATUS_JSON" | jq -r '.items[].metadata.name')"
     printf "${GREEN}${TICK}           cStorVolumes found:\033[0m $(echo "$CV_LIST" | wc -l)\n"
     OPENEBS_PV_JSON="$(kubectl get pv -o json -n openebs)"
+    CV_GET_DETAILS="$(kubectl get cstorvolume -A)"
     if [[ "$CV_LIST" != "" ]];
     then
         while read  -r line;
         do
             CV_NAME="$line"
-            cstorvolume_check
+            cstorvolume_check "$CV_GET_DETAILS"
         done <<< "$CV_LIST"
-        message cStorVolumes
+        message "cStorVolumes"
     fi
 }
 
 openebs_cvr () {
     separator
+    local COUNT=0
     CVR_STATUS_JSON="$(kubectl get cvr -A -o json)"
     CVR_LIST="$(echo "$CVR_STATUS_JSON" | jq -r '.items[] | .metadata.name')"
     printf "${GREEN}${TICK}           cStorVolumeReplicas found:\033[0m $(echo "$CVR_LIST" | wc -l)\n"
@@ -638,13 +644,13 @@ openebs_cvr () {
                 fi
             fi
         done <<< "$CVR_LIST"
-        message cStorVolumeReplicas
+        message "cStorVolumeReplicas"
     fi
 }
 
 openebs_blockdevices () {
     separator
-    COUNT=0
+    local COUNT=0
     printf "\033[1;35mBlock devices:\033[0m\n"
     BLOCK_DEVICE_JSON="$(kubectl get blockdevices -n openebs -o json)"
     BLOCK_DEVICE_LIST="$(echo "$BLOCK_DEVICE_JSON" | jq -r '.items[] | .metadata.name')"
@@ -670,7 +676,7 @@ openebs_blockdevices () {
 }
 
 openebs_blockdeviceclaims () {
-    COUNT=0
+    local COUNT=0
     separator
     printf "\033[1;35mBlock device claims:\033[0m\n"
     BLOCK_DEVICE_CLAIM_JSON="$(kubectl get blockdeviceclaims -n openebs -o json)"
@@ -700,7 +706,7 @@ openebs_blockdeviceclaims () {
 }
 
 cstorbackups () {
-    COUNT=0
+    local COUNT=0
     separator
     printf "\033[1;35mcStor backups:\033[0m\n"
     CSTOR_BACKUP_JSON="$(kubectl get cstorbackups -n openebs -o json)"
