@@ -80,7 +80,7 @@ pv_check () {
 }
 
 csp_check () {
-    COUNT=0
+    local COUNT=0
     CSP_LIST="$(echo "$CSP_JSON" | jq -r '.items[].metadata.name')"
     CST_GET_DETAIL="$(kubectl get csp --no-headers)"
     if [[ "$CSP_LIST" != "" ]];
@@ -137,7 +137,6 @@ cstorvolume_check () {
         verbose && echo -e "${GREEN}${TICK} [OK]      CstorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
         verbose && replica_check
     fi
-    return "$COUNT"
 }
 
 cvr_check () {
@@ -610,6 +609,7 @@ openebs_cv () {
         do
             CV_NAME="$line"
             cstorvolume_check "$CV_GET_DETAILS"
+            echo $COUNT
         done <<< "$CV_LIST"
         message "cStorVolumes"
     fi
