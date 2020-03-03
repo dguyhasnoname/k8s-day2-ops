@@ -137,17 +137,16 @@ cstorvolume_check () {
         verbose && echo -e "${GREEN}${TICK} [OK]      CstorVolume\033[0m" "$(echo "$CV_GET_DETAILS" | grep "$CV_NAME" )"
         verbose && replica_check
     fi
+    return "$COUNT"
 }
 
 cvr_check () {
+    #all statuses of cvr
+    #https://github.com/openebs/maya/blob/813defb937b9aab2ac0e669cce3f5109cbcda812/pkg/apis/openebs.io/v1alpha1/cstor_volume_replica.go#L74
     CVR_STATUS="$(echo "$CVR_STATUS_JSON" | jq -r '.items[] | select(.metadata.name | contains("'$CVR_NAME'")) | .status.phase')"
     if [[ "$CVR_STATUS" != "Healthy" ]];
     then
         echo -e "${RED}\xE2\x9D\x8C[ERROR]    CStorVolumeReplica\033[0m" "$CVR_DETAIL"
-        COUNT=$((COUNT+1))
-    elif [[ "$CVR_STATUS" == "Offline" ]];
-    then
-        echo -e "\033[1;33m! [WARNING] CStorVolumeReplica\033[0m" "$CVR_DETAIL"
         COUNT=$((COUNT+1))
     else
         verbose && echo -e "${GREEN}${TICK} [OK]      CstorVolumeReplica\033[0m" "$CVR_DETAIL"
@@ -311,7 +310,7 @@ pod_state_imagepullbackoff () {
 }
 
 pod_state_containercreating () {
-    POD_STATE_CONTAINER_CREATING_JSON="$(kubectl get events -o json -n "$NAMESPACE" | jq '.items[].message')"
+    POD_STATE_CONTAINER_CREATING_JSON="$(kubectl get events -o json -n "$NAMESPACE" --sort-by=.metadata.creationTimestamp --field-selector type!=Normal | jq '.items[].message')"
     echo -e "Reason of pod with status $STATUS:" | indent 16
     echo -e "\033[0;31m$POD_STATE_CONTAINER_CREATING_JSON\033[0m" | indent 16
 }
@@ -598,7 +597,7 @@ openebs_csp () {
 
 openebs_cv () {
     separator
-    local COUNT=0
+    #local COUNT=0
     printf "\033[1;35mStorage cstorvolumes:\033[0m\n"
     CV_STATUS_JSON="$(kubectl get cstorvolumes -A -o json)"
     CV_LIST="$(echo "$CV_STATUS_JSON" | jq -r '.items[].metadata.name')"
@@ -725,7 +724,7 @@ cstorbackups () {
                 verbose && printf "${GREEN}${TICK}%-10s %-75s %-10s\033[0m\n" " [OK]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS" \
                 && echo "$CSTOR_SPEC" | indent 12
             else
-                printf "${GREEN}${TICK}%-10s %-75s %-10s\033[0m\n" " [OK]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS"
+                printf "${RED}\xE2\x9D\x8C%-10s %-75s %-10s\033[0m\n" " [ERROR]" "$CSTOR_BACKUP_NAME" "$CSTOR_BACKUP_STATUS"
                 verbose && echo "$CSTOR_SPEC" | indent 12
                 COUNT=$((COUNT+1))
             fi
