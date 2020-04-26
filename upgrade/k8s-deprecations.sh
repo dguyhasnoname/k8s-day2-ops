@@ -32,8 +32,10 @@ usage () {
     [[ -z "$KUBECONFIG" ]] && echo "[WARNING]: Export KUBECONFIG before running the script."
     echo "Usage: "
     echo "./k8s-deprecations.sh -h/-help/--h           help"
-    echo "./k8s-deprecations.sh                        gets all deprecations in k8s version"
-    echo "./k8s-deprecations.sh <-v>                   debug mode, all deprecations in k8s version alongwith objects using it"
+    echo "./k8s-deprecations.sh <version>              gets all deprecations in k8s version"
+    echo "./k8s-deprecations.sh <version> <-v>         debug mode, all deprecations in k8s version alongwith objects using it"
+
+    echo "example: ./k8s-deprecations.sh 1.18.0 -v"
     exit
 }
 
