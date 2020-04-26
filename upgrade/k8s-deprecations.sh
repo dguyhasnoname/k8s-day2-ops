@@ -65,6 +65,8 @@ fetch_deprecated_objects () {
 }
 
 main () {
+    [ "$KUBECONFIG" == "" ] && echo -e "${RED}Please set KUBECONFIG for the cluster.${END}" && exit
+    [ -x jq ] && echo -e "${RED}Command 'jq' not found. Please install it.${END}" >&2 && exit 1
     get_swagger
     separator
     echo -e "${RED}Below is the list of deprecated apiVersion: ${END}"
