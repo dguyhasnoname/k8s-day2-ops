@@ -16,8 +16,8 @@ BOLD='\033[1;30m'
 TICK='\xE2\x9C\x94'
 NOT_OK='\xE2\x9D\x8C'
 END='\033[0m'
-GREP_STRING="error\|exception\|timeout|\retry\|unexpected\|denied\|\fail"
-VERBOSE_GREP_STRING="warn\|error\|exception\|timeout|\retry\|unexpected\|denied\|IOException|\fail|\unknown"
+GREP_STRING="error\|exception\|timeout|\retry\|unexpected\|denied\|\fail|\unable"
+VERBOSE_GREP_STRING="warn\|error\|exception\|timeout|\retry\|unexpected\|denied\|IOException|\fail|\unknown|\unable"
 
 verbose () {
     [ "$FLAG" == "-v" ] && true
