@@ -1,6 +1,6 @@
 #!/bin/bash
 ##########################################################################
-# This script finds all deprecations in k8s version.                     #
+# This script finds all deprecations in k8s apiVersion.                  #
 # Author: Mukund                                                         #
 # Date: 26th April 2020                                                  #
 # Version: 1.0                                                           #
@@ -41,9 +41,22 @@ usage () {
 
 get_swagger () {
     separator
-    echo "Fetching all objects from kubenetes repo..."
-    swagger_json="$(curl -s swagger-v"$VERSION".json https://raw.githubusercontent.com/kubernetes/kubernetes/v"$VERSION"/api/openapi-spec/swagger.json)"
-    deprecated_apiversion="$(echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -w DEPRECATED)"
+    current_k8s_version="$(kubectl get nodes -o json | jq -r '.items[].status.nodeInfo.kubeletVersion' | uniq | sed 's/\v//g')"
+    echo "Current k8s version: v$current_k8s_version"
+    version="$(echo $current_k8s_version | sed 's/\(.*\)\..*/\1/').0"
+    UPGRADE_PATH="v$current_k8s_version"
+    while [[ "$(echo "$version "| awk -F '.' '{print $2}')" -le "$(echo "$VERSION" | awk -F '.' '{print $2}')" ]];
+    do
+        echo "Fetching all objects from kubenetes repo: v$version..."
+
+        swagger_json="$(curl -s swagger-v"$version".json https://raw.githubusercontent.com/kubernetes/kubernetes/v"$version"/api/openapi-spec/swagger.json)"
+        #deprecated_apiversion="$(echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -w DEPRECATED)"
+        echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -w DEPRECATED >> deprecated_apiversion
+        major_version="$(echo $version | awk -F '.' '{print $2}')"
+        major_version=$(( $major_version+1 ))
+        version="1.$(echo $major_version).0"
+        UPGRADE_PATH="$UPGRADE_PATH >>> v1.$(echo $major_version).x"
+    done
 }
 
 fetch_deprecated_objects () {
@@ -56,7 +69,7 @@ fetch_deprecated_objects () {
         deprecated_object_list="$(echo "$deprecated_object_json" | jq -rj '.items[] | select(.apiVersion | contains("'$line'")) | .metadata.namespace, ": ",.metadata.name,"\n"')"
         if [[ -z "$deprecated_object_list" ]];
         then
-            echo -e "${GREEN}${TICK} 0 $deprecated_object_kind using deprecated apirVersion: $line${END}" | indent 10
+            echo -e "${GREEN}${TICK} 0 $deprecated_object_kind using deprecated apiVersion: $line${END}" | indent 10
         else
             echo -e "${RED}Deprecated $deprecated_object_kind found using deprecated apiVersion: $line${END}" | indent 10
             echo -e "$deprecated_object_list" | indent 10
@@ -67,12 +80,13 @@ fetch_deprecated_objects () {
 main () {
     [ "$KUBECONFIG" == "" ] && echo -e "${RED}Please set KUBECONFIG for the cluster.${END}" && exit
     [ -x jq ] && echo -e "${RED}Command 'jq' not found. Please install it.${END}" >&2 && exit 1
+
     get_swagger
     separator
-    echo -e "${RED}Below is the list of deprecated apiVersion: ${END}"
+    echo -e "${RED}Below is the list of deprecated apiVersion which may impact objects in cluster: ${END}"
     separator
-    DEPRECATED_LIST="$(echo  "$deprecated_apiversion" | awk -F ':' '{print $1}' | grep -v DEPRECATED | awk -F '.' '{print $NF":",$(NF-2)"/"$(NF-1)}')"
-    deprecated_kind="$(echo "$DEPRECATED_LIST" | awk -F ':' '{print $1}')"
+    DEPRECATED_LIST="$(cat deprecated_apiversion | awk -F ':' '{print $1}' | grep -v DEPRECATED | awk -F '.' '{print $NF":",$(NF-2)"/"$(NF-1)}' | sort | uniq)"
+    deprecated_kind="$(echo "$DEPRECATED_LIST" | awk -F ':' '{print $1}' | uniq)"
     echo  "$DEPRECATED_LIST"
     separator
     CURRENT_API_RESOURCES="$(kubectl api-resources --no-headers)"
@@ -83,7 +97,7 @@ main () {
         separator
         checked_object_kind="$line"
         echo -e "Checking if ${BOLD}$line${END} kind objects exists in the cluster... "
-        local apiversion="$(echo "$DEPRECATED_LIST" | grep "$line" | awk -F ':' '{print $2}' | uniq)"
+        local apiversion="$(echo "$DEPRECATED_LIST" | grep "$line" | awk -F ':' '{print $2}' | sort | uniq)"
         if [[ "$CURRENT_API_RESOURCES" == *"$line"* && ! "$checked_object_kind_list" == *"$checked_object_kind"* ]];
         then
             echo -e "${RED}$line kind objects found${END} which may be using deprecated apiVersion:"$apiversion""
@@ -93,6 +107,10 @@ main () {
             echo -e "${GREEN}${TICK} $line: no objects found!${END}"
         fi
     done <<< "$deprecated_kind"
+    separator
+    echo "Upgrade path:"
+    echo "$UPGRADE_PATH" | sed 's/\>>>[^>>>]*$//'
+    >deprecated_apiversion
 }
 
 
