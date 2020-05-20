@@ -123,3 +123,12 @@ At namespace level you can find below details:
 - pod state over a period of time
 - memory/cpu utilisation by pod
 - resource quota in namespace
+
+
+![image](images/slo.png)
+
+![image](images/cluster_status.png)
+
+![image1](images/node_status.png)
+
+![image2](images/namespace_status.png)
