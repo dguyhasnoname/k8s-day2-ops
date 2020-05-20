@@ -30,4 +30,8 @@ This repository contain scripts for Kubernetes day 2 operations
 
 ### debug_app_namespace.sh
 
-![image](doc/images/debug_app_namespace)
+![image](doc/images/debug_app_namespace.png)
+
+### get_namespace_objects.sh
+
+![image1](doc/images/get_namespace_objects.png)
