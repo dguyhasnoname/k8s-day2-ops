@@ -38,7 +38,7 @@ This repository contain scripts for Kubernetes day 2 operations
 
 ### probe_namespace_errors.sh
 
-![image2](doc/images/robe_namespace_errors.png)
+![image2](doc/images/probe_namespace_errors.png)
 
 ### k8s-deprecations.sh
 
