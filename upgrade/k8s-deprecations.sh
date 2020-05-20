@@ -103,12 +103,12 @@ main () {
             verbose && fetch_deprecated_objects "$checked_object_kind"
             checked_object_kind_list="$checked_object_kind_list,$checked_object_kind"
         else
-            echo -e "${GREEN}${TICK} $line: no objects found!${END}"
+            echo -e "${GREEN}${TICK} $line: no deprecated objects found!${END}"
         fi
     done <<< "$deprecated_kind"
     separator
     echo "Upgrade path:"
-    echo "$UPGRADE_PATH" | sed 's/\>>>[^>>>]*$//'
+    echo "$UPGRADE_PATH" | awk '{$NF="",$(NF-1)=""; print $0}'
     >deprecated_apiversion
 }
 
