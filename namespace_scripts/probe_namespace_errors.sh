@@ -7,8 +7,6 @@
 ##########################################################################
 
 START_TIME=$(date +%s)
-NAMESPACE=${1:-kube-system}
-FLAG="$2"
 YELLOW='\033[1;33m'
 RED='\033[1;31m'
 GREEN='\033[1;32m'
@@ -70,7 +68,7 @@ check_pod_logs_previous () {
     pod_container_list="$(echo "$POD_JSON_NAMESPACE" | jq  -r '.items[] | select (.metadata.name == "'$line'") | .spec.containers[].name')"
     while read -r line;
     do
-        previous_log="$(kubectl logs "$current_pod" -c "$line" -n "$NAMESPACE" --tail=500 |  grep -i ${VERBOSE_GREP_STRING} | tail -3)"
+        previous_log="$(kubectl logs "$current_pod" -c "$line" -n "$NAMESPACE" --tail=1000 |  grep -i ${VERBOSE_GREP_STRING} | tail -3)"
         echo "$previous_log"
     done <<< "$pod_container_list"
 }
@@ -81,7 +79,7 @@ check_pod_logs () {
     do
         if verbose;
         then
-            pod_log="$(kubectl logs "$line" -n "$NAMESPACE" --all-containers --tail=500 |  grep -i  ${VERBOSE_GREP_STRING} | tail -3)"
+            pod_log="$(kubectl logs "$line" -n "$NAMESPACE" --all-containers --tail=1000 |  grep -i  ${VERBOSE_GREP_STRING} | tail -3)"
         else
             pod_log="$(kubectl logs "$line" -n "$NAMESPACE" --all-containers  --tail=100|  grep -i  ${GREP_STRING} | tail -3)"
         fi
@@ -110,20 +108,23 @@ probe () {
     check_pod_logs
 }
 
-main () {
-    [[ "$NAMESPACE" == "-h" || "$NAMESPACE" == "--h" || "$NAMESPACE" == "-help" || "$NAMESPACE" == "--help" ]] && usage
-    if [[ "$NAMESPACE" == "-v" ]];
-    then
-        NAMESPACE="kube-system"
-        FLAG="-v"
-        probe
-    else
-        probe
-    fi
-    separator
-    END_TIME=$(date +%s)
-    EXECUTION_TIME=$((END_TIME-START_TIME))
-    echo "Total time taken:" "$EXECUTION_TIME"s
-}
 
-main
+OPTIND=1         
+
+while getopts "h?n:v" opt; do
+    case "$opt" in
+    h|\?)
+        usage
+        exit 0
+        ;;
+    n)  NAMESPACE=$OPTARG
+        ;;    
+    v)  FLAG="-v"
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "${1:-}" = "--" ] && shift
+probe
