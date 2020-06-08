@@ -6,8 +6,8 @@
 # Version: 1.0                                                           #
 ##########################################################################
 
-NAMESPACE="${1:-kube-system}"
-FLAG="$2"
+# NAMESPACE="${1:-kube-system}"
+# FLAG="$2"
 
 [ "$(echo $KUBECONFIG)" == "" ] && echo "Please set KUBECONFIG for the cluster." && exit
 
@@ -120,5 +120,25 @@ get_all_objects() {
     separator
 }
 
-[[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
+#[[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
+
+
+OPTIND=1         
+
+while getopts "h?n:v" opt; do
+    case "$opt" in
+    h|\?)
+        usage
+        exit 0
+        ;;
+    n)  NAMESPACE=$OPTARG
+        ;;    
+    v)  FLAG="-v"
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "${1:-}" = "--" ] && shift
 get_objects
