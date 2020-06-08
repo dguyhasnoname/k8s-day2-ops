@@ -108,6 +108,7 @@ shift $((OPTIND-1))
 
 [[ -z "$NAMESPACE"  || -z "$OBJECT" || -z "$STRING" ]] && \
 echo "[ERROR] Missing mandatory arguments" && usage 
+[ -x parallel ] && echo -e "${RED}Command 'parallel' not found. Please install it.${END}" >&2 && exit 1
 delete_objects
 
 END_TIME=$(date +%s)
