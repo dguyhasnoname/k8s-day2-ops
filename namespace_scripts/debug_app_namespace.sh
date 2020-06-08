@@ -775,7 +775,24 @@ main() {
     ! verbose && echo "Run script  with '-v' flag to get more details.."
 }
 
-[[ "$1" == "-h" || "$1" == "--h" || "$1" == "-help" ]] && usage
+OPTIND=1         
+
+while getopts "h?n:v" opt; do
+    case "$opt" in
+    h|\?)
+        usage
+        exit 0
+        ;;
+    n)  NAMESPACE=$OPTARG
+        ;;    
+    v)  FLAG="-v"
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "${1:-}" = "--" ] && shift
 main
 
 END_TIME=$(date +%s)
