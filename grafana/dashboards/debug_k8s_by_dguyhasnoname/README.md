@@ -23,6 +23,9 @@ alertmanager:
     hosts: [alertmanager.abc.com]
 
 grafana:
+  image:
+    repository: grafana/grafana
+    tag: 7.0.3
   ingress:
     enabled: true
     hosts: [grafana.abc.com]
