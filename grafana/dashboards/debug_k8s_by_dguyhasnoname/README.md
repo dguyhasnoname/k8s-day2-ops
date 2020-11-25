@@ -4,14 +4,18 @@ grafana link: https://grafana.com/grafana/dashboards/11802
 
 This dashboard shows SLO, error budget and can help troubleshooting issue in k8s cluster at cluster, node and namespace level.
 
-Prometheus helm chart used: [stable/prometheus-operator](https://github.com/helm/charts/tree/master/stable/prometheus-operator)
+## Installation
+
+Prometheus for this dashboard has been installed using stable helm chart of prometheus operator.
+
+helm chart: [stable/prometheus-operator](https://github.com/helm/charts/tree/master/stable/prometheus-operator)
 Grafana version recommended: 7.0.0
 
-Special Plugin dependencies:
+### Special Plugin dependencies:
 
 - Status dot
 
-values.yaml for operator helm chart:
+### values.yaml for operator helm chart:
 
 ```
 prometheusOperator:
@@ -85,7 +89,9 @@ nodeExporter:
   enabled: true
 ```
 
-This dashboard show SLO and error budget for over all cluster/namespace and can help troubleshooting issue in k8s cluster at cluster, node and namespace level.
+This dashboard:
+- shows SLO and error budget for over all cluster/namespace
+- can help troubleshooting issue in k8s cluster at cluster, node and namespace level.
 
 Cluster SLO and error budget has been calculated based on control plane pods. Namespace SLO and error budget is based on all pods running in the namespace.
 

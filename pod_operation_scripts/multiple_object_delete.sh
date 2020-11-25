@@ -69,7 +69,7 @@ delete_objects () {
         else
             echo "****Deleting $OBJECT in parallel mode!****"
             separator
-            parallel --jobs=10 "echo {}; kubectl delete ${OBJECT} {} -n ${NAMESPACE};" ::: ${LIST_OBJECTS}
+            parallel --jobs=500 "echo {}; kubectl delete ${OBJECT} {} -n ${NAMESPACE};" ::: ${LIST_OBJECTS}
         fi
 
         separator
