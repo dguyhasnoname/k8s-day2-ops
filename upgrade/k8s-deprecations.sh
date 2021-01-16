@@ -29,12 +29,15 @@ indent () {
 usage () {
     [[ -z "$KUBECONFIG" ]] && echo "[WARNING]: Export KUBECONFIG before running the script."
     echo "Usage: "
-    echo "./k8s-deprecations.sh -h/-help/--h                help"
-    echo "./k8s-deprecations.sh -v <version>                gets all deprecations in k8s version"
-    echo "./k8s-deprecations.sh -v <version> -d             debug mode, all deprecations in k8s version alongwith objects using it"
-    echo "./k8s-deprecations.sh -v <version> -n <namespace> namespaced all deprecations in k8s version alongwith objects using it"
-  
-    echo "example: ./k8s-deprecations.sh -v 1.18.0 -n kube-system -d"
+    separator
+    echo "./k8s-deprecations.sh -v 1.18.0 -n kube-system -d"
+    separator
+    echo "Flags:"
+    echo "  -h                  help"
+    echo "  -v   Mandatory      Gets all deprecations in k8s api"
+    echo "  -d   Optional       Debug mode, all deprecations in k8s api alongwith objects using it"
+    echo "  -n   Optional       Pass namespace name to get namespaced deprecations in k8s api alongwith objects using it"
+    separator
     exit
 }
 
@@ -53,6 +56,9 @@ get_swagger () {
         swagger_json="$(curl -s swagger-v"$version".json https://raw.githubusercontent.com/kubernetes/kubernetes/v"$version"/api/openapi-spec/swagger.json)"
         #deprecated_apiversion="$(echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -w DEPRECATED)"
         echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -i DEPRECATED >> deprecated_apiversion
+        major_version="$(echo $version | awk -F '.' '{print $2}')"
+        major_version=$(( $major_version+1 ))
+        version="1.$(echo $major_version).0"        
     done
 }
 
@@ -71,7 +77,7 @@ fetch_deprecated_objects () {
     while read -r line;
     do
         deprecated_object_list="$(echo "$deprecated_object_json" | jq -rj '.items[] | select(.apiVersion | contains("'$line'")) | .metadata.namespace, ": ",.metadata.name,"\n"')"
-        if [[ -z "$deprecated_object_list" ]];
+        if [[ $? -eq 0 && -z "$deprecated_object_list" ]];
         then
             echo -e "${GREEN}${TICK} 0 $deprecated_object_kind using deprecated apiVersion: $line${END}" | indent 10
         else
@@ -88,7 +94,7 @@ fetch_deprecated_objects () {
 
 main () {
     [ "$KUBECONFIG" == "" ] && echo -e "${RED}Please set KUBECONFIG for the cluster.${END}" && exit
-
+    [[ ! -z "$NAMESPACE" ]] && ! kubectl get ns "$NAMESPACE" && exit
     get_swagger
     separator
     echo -e "${RED}Below is the list of deprecated apiVersion which may impact objects in cluster: ${END}"
