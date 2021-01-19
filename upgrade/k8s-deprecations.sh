@@ -28,10 +28,8 @@ indent () {
 
 usage () {
     [[ -z "$KUBECONFIG" ]] && echo "[WARNING]: Export KUBECONFIG before running the script."
-    echo "Usage: "
-    separator
-    echo "./k8s-deprecations.sh -v 1.18.0 -n kube-system -d"
-    separator
+    printf "Usage: \n\n"
+    printf "./k8s-deprecations.sh -v 1.18.0 -n kube-system -d \n\n"
     echo "Flags:"
     echo "  -h                  help"
     echo "  -v   Mandatory      Gets all deprecations in k8s api"
@@ -46,7 +44,10 @@ get_swagger () {
     separator
     >deprecated_apiversion
     echo "Gathering info of current cluster..."
-    current_k8s_version="$(kubectl get nodes -o json | jq -r '.items[].status.nodeInfo.kubeletVersion' | uniq | sed 's/\v//g')"
+    set -e
+    current_k8s_version="$(kubectl get nodes -o json \
+    | jq -r '.items[].status.nodeInfo.kubeletVersion' | uniq | sed 's/\v//g')"
+    set +e
     echo "Current k8s version: v$current_k8s_version"
     version="$(echo $current_k8s_version | sed 's/\(.*\)\..*/\1/').0"
     UPGRADE_PATH="v$current_k8s_version"
@@ -55,7 +56,8 @@ get_swagger () {
         echo "Fetching all objects from kubenetes repo: v$version..."
         swagger_json="$(curl -s swagger-v"$version".json https://raw.githubusercontent.com/kubernetes/kubernetes/v"$version"/api/openapi-spec/swagger.json)"
         #deprecated_apiversion="$(echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -w DEPRECATED)"
-        echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' | grep -i DEPRECATED >> deprecated_apiversion
+        echo "$swagger_json" | jq -r '.definitions | keys[] as $k | "\($k): \(.[$k] | .description)"' \
+        | grep -i DEPRECATED >> deprecated_apiversion
         major_version="$(echo $version | awk -F '.' '{print $2}')"
         major_version=$(( $major_version+1 ))
         version="1.$(echo $major_version).0"        
@@ -71,12 +73,13 @@ fetch_deprecated_objects () {
     else
         deprecated_object_json="$(kubectl get $deprecated_object_kind -n $NAMESPACE -o json)"
     fi
-
-    deprecated_apiversion_list="$(echo "$DEPRECATED_LIST" | grep -w "$deprecated_object_kind" | awk -F ':' '{print $2}' | uniq)"
+    deprecated_apiversion_list="$(echo "$DEPRECATED_LIST" \
+    | grep -w "$deprecated_object_kind" | awk -F ':' '{print $2}' | uniq)"
 
     while read -r line;
     do
-        deprecated_object_list="$(echo "$deprecated_object_json" | jq -rj '.items[] | select(.apiVersion | contains("'$line'")) | .metadata.namespace, ": ",.metadata.name,"\n"')"
+        deprecated_object_list="$(echo "$deprecated_object_json" \
+        | jq -rj '.items[] | select(.apiVersion | contains("'$line'")) | .metadata.namespace, ": ",.metadata.name,"\n"')"
         if [[ $? -eq 0 && -z "$deprecated_object_list" ]];
         then
             echo -e "${GREEN}${TICK} 0 $deprecated_object_kind using deprecated apiVersion: $line${END}" | indent 10
@@ -86,9 +89,12 @@ fetch_deprecated_objects () {
             then
                 separator
                 printf "NAMESPACE%37s\n" $deprecated_object_kind | indent 10
-                echo -e "$deprecated_object_list" | awk -F ":" '{printf("%-35s%-20s\n", $1, $2)}' | indent 10
+                echo -e "$deprecated_object_list" \
+                | awk -F ":" '{printf("%-35s%-20s\n", $1, $2)}' | indent 10
             fi
-            var="$(paste -d, <(echo "$deprecated_object_kind") <(echo "$line") <(echo -e "$deprecated_object_list" | awk -F ":" '{print $1}') <(echo -e "$deprecated_object_list" | awk -F ": " '{print $2}'))"
+            var="$(paste -d, <(echo "$deprecated_object_kind") <(echo "$line") \
+            <(echo -e "$deprecated_object_list" | awk -F ":" '{print $1}') \
+            <(echo -e "$deprecated_object_list" | awk -F ": " '{print $2}'))"
             echo "$var" >> "$FILENAME"
         fi       
     done <<< "$deprecated_apiversion_list"
@@ -96,13 +102,14 @@ fetch_deprecated_objects () {
 
 main () {
     [ "$KUBECONFIG" == "" ] && echo -e "${RED}Please set KUBECONFIG for the cluster.${END}" && exit
-    [[ ! -z "$NAMESPACE" ]] && ! kubectl get ns "$NAMESPACE" && exit
+    [[ ! -z "$NAMESPACE" ]] && ! kubectl get ns "$NAMESPACE" >/dev/null && exit
     get_swagger
     separator
     echo -e "${RED}Below is the list of deprecated apiVersion which may impact objects in cluster: ${END}"
     separator
 
-    DEPRECATED_LIST="$(cat deprecated_apiversion | awk -F ':' '{print $1}' | grep -v DEPRECATED | awk -F '.' '{print $NF":",$(NF-2)"/"$(NF-1)}' | sort | uniq)"
+    DEPRECATED_LIST="$(cat deprecated_apiversion | awk -F ':' '{print $1}' |\
+     grep -v DEPRECATED | awk -F '.' '{print $NF":",$(NF-2)"/"$(NF-1)}' | sort | uniq)"
     deprecated_kind="$(echo "$DEPRECATED_LIST" | awk -F ':' '{print $1}' | uniq)"
     printf "K8S_OBJECT%16sAPI_VERSION\n"
     echo  "$DEPRECATED_LIST" | awk -F":" '{printf("%-25s%10s\n", $1, $2)}'
@@ -156,7 +163,6 @@ shift $((OPTIND-1))
 
 [[ -z "$VERSION" ]] && \
 echo "[ERROR] Missing mandatory arguments" && usage 
-[ -x parallel ] && echo -e "${RED}Command 'parallel' not found. Please install it.${END}" >&2 && exit 1
 [ -x jq ] && echo -e "${RED}Command 'jq' not found. Please install it.${END}" >&2 && exit 1
 main
 
