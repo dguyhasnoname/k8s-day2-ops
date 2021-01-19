@@ -89,10 +89,9 @@ fetch_deprecated_objects () {
                 echo -e "$deprecated_object_list" | awk -F ":" '{printf("%-35s%-20s\n", $1, $2)}' | indent 10
             fi
             var="$(paste -d, <(echo "$deprecated_object_kind") <(echo "$line") <(echo -e "$deprecated_object_list" | awk -F ":" '{print $1}') <(echo -e "$deprecated_object_list" | awk -F ": " '{print $2}'))"
-            echo "$var" >> output."csv"     
+            echo "$var" >> "$FILENAME"
         fi       
     done <<< "$deprecated_apiversion_list"
-
 }
 
 main () {
@@ -112,8 +111,9 @@ main () {
     CURRENT_API_RESOURCES="$(kubectl api-resources --no-headers)"
     checked_object_kind_list=""
 
-    header=$(paste -d, <(echo "OBJECT_TYPE") <(echo "API") <(echo "NAMESPACE") <(echo "OBJECT_NAME"))
-    echo "$header" >> output."csv"
+    FILENAME="$(date +"%T-%d-%m-%Y").csv"
+    header=$(paste -d, <(echo "OBJECT_TYPE") <(echo "DEPRECATED_API") <(echo "NAMESPACE") <(echo "OBJECT_NAME"))
+    echo "$header" >> "$FILENAME"
 
     while read -r line;
     do
@@ -135,9 +135,7 @@ main () {
     separator
 }
 
-
-OPTIND=1         
-
+OPTIND=1
 while getopts "h?n:dv:o:" opt; do
     case "$opt" in
     h|\?)
@@ -153,9 +151,7 @@ while getopts "h?n:dv:o:" opt; do
         ;;        
     esac
 done
-
 shift $((OPTIND-1))
-
 [ "${1:-}" = "--" ] && shift
 
 [[ -z "$VERSION" ]] && \
