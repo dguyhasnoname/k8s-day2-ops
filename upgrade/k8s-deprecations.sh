@@ -86,10 +86,13 @@ fetch_deprecated_objects () {
             then
                 separator
                 printf "NAMESPACE%37s\n" $deprecated_object_kind | indent 10
-                echo -e "$deprecated_object_list" | awk -F":" '{printf("%-35s%-20s\n", $1, $2)}' | indent 10
+                echo -e "$deprecated_object_list" | awk -F ":" '{printf("%-35s%-20s\n", $1, $2)}' | indent 10
             fi
-        fi
+            var="$(paste -d, <(echo "$deprecated_object_kind") <(echo "$line") <(echo -e "$deprecated_object_list" | awk -F ":" '{print $1}') <(echo -e "$deprecated_object_list" | awk -F ": " '{print $2}'))"
+            echo "$var" >> output."csv"     
+        fi       
     done <<< "$deprecated_apiversion_list"
+
 }
 
 main () {
@@ -109,10 +112,14 @@ main () {
     CURRENT_API_RESOURCES="$(kubectl api-resources --no-headers)"
     checked_object_kind_list=""
 
+    header=$(paste -d, <(echo "OBJECT_TYPE") <(echo "API") <(echo "NAMESPACE") <(echo "OBJECT_NAME"))
+    echo "$header" >> output."csv"
+
     while read -r line;
     do
         separator
         checked_object_kind="$line"
+        
         ! verbose && echo -e "Checking if ${BOLD}$line${END} kind objects exists in the cluster... "
         local apiversion="$(echo "$DEPRECATED_LIST" | grep "$line" | awk -F ':' '{print $2}' | sort | uniq)"
         if [[ "$CURRENT_API_RESOURCES" == *"$line"* && ! "$checked_object_kind_list" == *"$checked_object_kind"* ]];
