@@ -43,7 +43,6 @@ usage () {
 # this function complies a list of possible deprecated APIs from k8s repo
 get_swagger () {
     separator
-    truncate --size 0 deprecated_apiversion deprecated_apiversion_group_version_kind
     echo "Gathering info of current cluster..."
 
     current_k8s_version="$(kubectl get nodes -o json \
@@ -194,7 +193,7 @@ main () {
         fi
     done <<< "$deprecated_kind"
 
-    [[ "$FORMAT" == "json" ]] && echo -e "${BOLD}JSON file: generated${END} $FILENAME.json"
+    [[ "$FORMAT" == "json" ]] && echo -e "${BOLD}JSON file generated:${END} $FILENAME.json"
     [[ "$FORMAT" == "csv" ]] && echo -e "${BOLD}Report generated.${END} Please check the report in file $FILENAME.csv"
     printf "\n${BOLD}Deprecation summary:${END}\n\n"
     printf "%-40s%-40s%-20s\n" "KIND" "API_VERSION" "TOTAL_DEPRECATIONS" | indent 10
@@ -203,6 +202,7 @@ main () {
     do
         echo -e "$list" | awk -F "," '{printf("%-40s%-40s%-20s\n", $1, $2, $3)}' | indent 10
     done
+    rm deprecated_apiversion deprecated_apiversion_group_version_kind
 }
 
 OPTIND=1
