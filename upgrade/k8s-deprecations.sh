@@ -32,10 +32,10 @@ usage () {
     printf "./k8s-deprecations.sh -v 1.18.0 -n kube-system -d \n\n"
     echo "Flags:"
     echo "  -h                  help"
-    echo "  -v   Mandatory      Gets all deprecations in k8s api"
-    echo "  -d   Optional       Debug mode, all deprecations in k8s api alongwith objects using it"
-    echo "  -n   Optional       Pass namespace name to get namespaced deprecations in k8s api alongwith objects using it"
-    echo "  -o   Optional       Output in json format"
+    echo "  -v   Mandatory      Kubernetes version to be checked. Gets all deprecations in k8s api."
+    echo "  -d   Optional       Debug mode, all deprecations in k8s api alongwith objects using it."
+    echo "  -n   Optional       Pass namespace name to get namespaced deprecations in k8s api alongwith objects using it."
+    echo "  -o   Optional       Output in json/csv format. Valid values are json & csv."
     separator
     exit
 }
@@ -78,16 +78,16 @@ get_swagger () {
         major_version=$(( $major_version+1 ))
         version="1.$(echo $major_version).0"        
     done
-    
+    separator
     echo -e "${RED}Below is the list of deprecated apiVersion which may impact objects in cluster: ${END}"
     separator    
-    deprecated_kind="$(cat deprecated_apiversion \
-    | awk -F ': ' '{print $1}' | awk '!a[$0]++' | sort)"
+    deprecated_kind="$(awk -F ': ' '{print $1}' deprecated_apiversion \
+    | grep -vw 'Binding' | awk '!a[$0]++' | sort)"
 
     printf "${BOLD}%-45s%-10s\n${END}" "K8S_OBJECT" "API_VERSION"
-    cat deprecated_apiversion | awk -F ": " '{printf("%-45s%-10s\n", $1, $2)}' \
+    awk -F ": " '{printf("%-45s%-10s\n", $1, $2)}' deprecated_apiversion \
     | awk '!a[$0]++' | sort && separator
-    DEPRECATED_LIST="$(cat deprecated_apiversion | awk '!a[$0]++' | sort)"
+    DEPRECATED_LIST="$(awk '!a[$0]++' deprecated_apiversion | grep -vw 'Binding' | sort)"
 }
 
 # this function complies a list of possible deprecated APIs from the given cluster
@@ -150,9 +150,13 @@ fetch_deprecated_objects () {
             elif [[ "$FORMAT" == "csv" ]];
             then
                 # generating csv report for deprecated objects found and their corresponding namespaces
-                header=$(paste -d, <(echo "OBJECT_TYPE") <(echo "DEPRECATED_API") <(echo "NAMESPACE") <(echo "OBJECT_NAME"))
-                echo "$header" >> "$FILENAME"                
-                var="$(paste -d, <(echo "$deprecated_object_kind") <(echo "$line") \
+                
+                if [ ${#SUMMARY[@]} -eq 0 ];
+                then
+                    header=$(paste -d, <(echo "OBJECT_TYPE") <(echo "DEPRECATED_API") <(echo "NAMESPACE") <(echo "OBJECT_NAME"))
+                    echo "$header" >> "$FILENAME.csv"
+                fi
+                var="$(paste -d, <(echo "$deprecated_object_kind") <(echo "$api") \
                 <(echo -e "$deprecated_object_list" | awk -F ": " '{print $1}' | sed "s/null/GLOBAL/" ) \
                 <(echo -e "$deprecated_object_list" | awk -F ": " '{print $2}'))"
                 echo "$var" >> "$FILENAME.csv"
@@ -163,6 +167,7 @@ fetch_deprecated_objects () {
                 separator
             fi
             SUMMARY+=($deprecated_object_kind,$api,$deprecated_object_count,$total_object_count)
+             
         fi
     done <<< "$deprecated_apiversion_list"
 }
@@ -182,7 +187,7 @@ main () {
     while read -r line;
     do
         checked_object_kind="$line"
-        verbose && echo -e "Checking if ${BOLD}$line${END} kind objects exists in the cluster... "
+        echo -e "Checking if ${BOLD}$line${END} kind objects exists in the cluster... "
 
         if [[ "$CURRENT_API_RESOURCES" == *"$line"* && ! "$checked_object_kind_list" == *"$checked_object_kind"* ]];
         then
@@ -228,6 +233,7 @@ shift $((OPTIND-1))
 [ -x jq ] && echo -e "${RED}Command 'jq' not found. Please install it.${END}" >&2 && exit 1
 
 main
+
 END_TIME=$(date +%s)
 EXECUTION_TIME=$((END_TIME-START_TIME))
 separator
