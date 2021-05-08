@@ -31,9 +31,10 @@ optional arguments:
   -n, --namespace  check resources in specific namespace.
   -f, --filter     filter resource usage by namespace|pods
   -o, --output     for output in json format pass json. Default is plain text
-  ```
 
-To find resource usage by nodes:
+```
+
+#### To find resource usage by nodes:
 
 ```
 [01:53 PM UTC 08.05.2021 ☸ api.dguyhasnoname.k8s.cloud 📁 k8s-toppur] 
@@ -64,9 +65,12 @@ To find resource usage by nodes:
   Total:                         3304m     3973.07GB    
 
 
-Total time taken: 3.3s```
+Total time taken: 3.3s
 
-To find resource usage by namespace:
+```
+
+
+#### To find resource usage by namespace:
 
 
 ```
@@ -108,11 +112,11 @@ To find resource usage by namespace:
 Total time taken: 6.52s
 ```
 
-To find resource usage in a namespace:
+#### To find resource usage in a namespace:
 
 ![image](imgs/namespaced_details.png)
 
-To find resource usage by pods:
+#### To find resource usage by pods:
 
 ![image](imgs/resource_usage_by_pods.png)
 
