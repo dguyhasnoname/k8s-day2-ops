@@ -9,7 +9,7 @@
 START_TIME=$(date +%s)
 RED='\033[1;31m'
 GREEN='\033[0;32m'
-BOLD='\033[1;30m'
+BOLD='\033[1;33m'
 END='\033[0m'
 TICK='\xE2\x9C\x94'
 
@@ -46,7 +46,7 @@ get_swagger () {
     echo "Gathering info of current cluster..."
 
     current_k8s_version="$(kubectl get nodes -o json \
-    | jq -r '.items[].status.nodeInfo.kubeletVersion' | uniq | sed 's/\v//g')"
+    | jq -r '.items[].status.nodeInfo.kubeletVersion' | uniq | sed 's/^v//g')"
 
     echo "Current k8s version: v$current_k8s_version"
     version="$(echo $current_k8s_version | sed 's/\(.*\)\..*/\1/').0"
@@ -181,7 +181,8 @@ main () {
     checked_object_kind_list=""
     SUMMARY=()
     FREQUENT_OBJECTS=(ClusterRole,ClusterRoleBinding,CustomResourceDefinition,DaemonSet,Deployment,Ingress,NetworkPolicy,PodSecurityPolicy,Role,RoleBinding,StatefulSet)
-    FILENAME="$(date +"%T-%d-%m-%Y")"
+    CLUSTER_NAME="$(grep name $KUBECONFIG | awk -F 'name: ' 'NR==1{print $2}')"
+    FILENAME="${CLUSTER_NAME}_$(date +"%d-%m-%Y-%s")"
 
     # fetches deprecated objects in running cluster as per the DEPRECATED_LIST
     while read -r line;

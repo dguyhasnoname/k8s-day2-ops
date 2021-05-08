@@ -19,8 +19,9 @@ This repository contain scripts for Kubernetes day 2 operations
         - This script can be used to delete multiple pods having a string common in their name.
     - pod_error_count.sh
 4. k8s cluster resource calculation scripts
-    - util.sh:  DEPRECATED
-        - This script calculates resources in a cluster. 
+    - k8s-toppur:  
+        - This tool calculates runtime resource usage in a cluster. 
+        - based on python k8s client.
 5. k8s cluster upgrade related scripts
     - k8s-deprecations.sh
         - This script lists all apiVersion deprecations in a cluster alongwith namespace: object relation.
