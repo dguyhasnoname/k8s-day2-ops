@@ -1,5 +1,6 @@
 import os, getopt, argparse, sys, time, math
 start_time = time.time()
+import urllib3
 from datetime import datetime, timezone
 from modules.logging import Logger
 from modules.getopts import GetOpts
@@ -25,7 +26,7 @@ Before running script export KUBECONFIG file as env:
 
 class K8sToppur():
     #  collects resource usage by node. Verfied o/p from kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes | jq -r '.items[].usage.memory' | sed 's/[^0-9]*//g'  |  awk '{ sum += $1 } END { print sum }' 
-    def get_nodes(output):
+    def get_nodes(output, sort):
         data, total_cpu, total_mem = [], 0, 0
         _logger = Logger.get_logger('K8sToppur', output)
         _logger.info("Getting node details.")
@@ -40,9 +41,10 @@ class K8sToppur():
                 memory = round(int(stats['usage']['memory'].strip('Ki')) / 1000000, 2)            
             total_cpu += cpu
             total_mem += memory
-            data.append([stats['metadata']['name'], str(math.ceil(cpu)) + 'm', str(memory) + ' GB'])
-        data.append(['Total:', str(math.ceil(total_cpu)) + 'm', str(round(total_mem, 2)) + 'GB'])
-        headers = ["NODE_NAME", "CPU_USED", "MEMORY_USED"]
+            data.append([stats['metadata']['name'], str(math.ceil(cpu)) + 'm', str(memory)])
+        data.append(['\nTotal:', '\n' + str(math.ceil(total_cpu)) + 'm', '\n' + str(round(total_mem, 2)) + ' GB'])
+        data = Output.bar(data, 'cpu', 'node')
+        headers = ["NODE_NAME", "CPU_USED", "%AGE_CLUSTER_TOTAL_CPU", "MEM_USED(GB)", "%AGE_CLUSTER_TOTAL_MEM"]
         Output.print_table(data, headers, True)
 
     def get_pods(output):
@@ -134,6 +136,7 @@ class K8sToppur():
 
 
 def main():
+    urllib3.disable_warnings()
     options = GetOpts.get_opts()
     if options[0]:
         usage()
@@ -144,7 +147,7 @@ def main():
     elif options[2]:
         K8sToppur.get_namespaced_resource_usage(options[3], options[2], options[4])
     else:  
-        K8sToppur.get_nodes(options[3])
+        K8sToppur.get_nodes(options[3], options[4])
     Output.time_taken(start_time)
 
 if __name__ == "__main__":

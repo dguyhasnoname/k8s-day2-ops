@@ -50,3 +50,30 @@ class Output:
             print (table)
         else:
             return
+
+    # prints analysis in bar format with %age, count and message
+    def bar(data, resource, k8s_object):
+        total_cpu = re.sub('[^0-9]','', data[-1][1])
+        total_mem = re.sub('[^0-9]','', data[-1][2])
+        i = 0
+        for line in data:
+            show_bar = []
+            cpu_used = re.sub('[^0-9]','', line[1])
+            mem_used = re.sub('[^0-9]','', line[2])
+            cpu_percentage = round((100 * int(cpu_used) / int(total_cpu)), 2)
+            mem_percentage = round((100 * int(mem_used) / int(total_mem)), 2)
+
+            for i in range(15):
+                if int(i) < cpu_percentage / 4:
+                    show_bar.append(u'\u2588')
+                else:
+                    show_bar.append(u'\u2591')
+            if 'Total:' not in line[0]:
+                line.insert(2, "{} {}%".format("".join(show_bar), round(cpu_percentage, 1)))
+                line.append("{} {}%".format("".join(show_bar), round(mem_percentage, 1)))
+            else:
+                line.insert(2, '')
+                line.append('')
+            
+        return data
+        
