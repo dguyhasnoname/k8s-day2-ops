@@ -132,7 +132,7 @@ class K8sToppur():
         headers = ["POD_NAME" , "CPU_USED", "MEMORY_USED(MB)", "NAMSPACE"]
         data = Output.sort_data(data, sort)
         data.append(['\nTotal:', '\n' + str(math.ceil(total_cpu)) + 'm', '\n' + str(round(total_mem / 1000, 2)) + ' GB', ''])        
-        Output.print_table(data, headers, True)
+        Output.print(data, headers, output)
 
 
 def main():
@@ -140,7 +140,8 @@ def main():
     options = GetOpts.get_opts()
     if options[0]:
         usage()
-    elif 'namespace' in options[5] and not options[2]:
+
+    if 'namespace' in options[5] and not options[2]:
         K8sToppur.get_resource_usage_by_ns(options[3], options[4])
     elif 'pod' in options[5] and not options[2]:
         K8sToppur.get_resource_usage_by_pod(options[3], options[4])
