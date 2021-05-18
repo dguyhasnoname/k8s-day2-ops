@@ -20,8 +20,8 @@ Before running script export KUBECONFIG file as env:
     
     parser.add_argument('-s', '--sort', action="store_true", help="sort by cpu/memory. Default sorting is by name.")
     parser.add_argument('-n', '--namespace', action="store_true", help="check resources in specific namespace.")
-    parser.add_argument('-f', '--filter', action="store_true", help="filter resource usage by namespace|pods")
-    parser.add_argument('-o', '--output', action="store_true", help="for output in json format pass json. Default is plain text")
+    parser.add_argument('-f', '--filter', action="store_true", help="filter resource usage by namespace|pods.")
+    parser.add_argument('-o', '--output', action="store_true", help="output formats csv|json|tree. Default is text on stdout.")
     parser.parse_args()
 
 class K8sToppur():
