@@ -20,7 +20,7 @@ Before running script export KUBECONFIG file as env:
     
     parser.add_argument('-s', '--sort', action="store_true", help="sort by cpu/memory. Default sorting is by name.")
     parser.add_argument('-n', '--namespace', action="store_true", help="check resources in specific namespace.")
-    parser.add_argument('-f', '--filter', action="store_true", help="filter resource usage by namespace|pods.")
+    parser.add_argument('-f', '--filter', action="store_true", help="filter resource usage by namespace|pods in overall cluster.")
     parser.add_argument('-o', '--output', action="store_true", help="output formats csv|json|tree. Default is text on stdout.")
     parser.parse_args()
 
@@ -43,9 +43,9 @@ class K8sToppur():
             total_mem += memory
             data.append([stats['metadata']['name'], str(math.ceil(cpu)) + 'm', str(memory)])
         data.append(['\nTotal:', '\n' + str(math.ceil(total_cpu)) + 'm', '\n' + str(round(total_mem, 2)) + ' GB'])
-        data = Output.bar(data, 'cpu', 'node')
+        data = Output.bar(data)
         headers = ["NODE_NAME", "CPU_USED", "%AGE_CLUSTER_TOTAL_CPU", "MEM_USED(GB)", "%AGE_CLUSTER_TOTAL_MEM"]
-        Output.print_table(data, headers, True)
+        Output.print(data, headers, output)
 
     def get_pods(output):
         pod_details = K8sCustomObjects.get_custom_object_pods(output)
@@ -69,11 +69,11 @@ class K8sToppur():
                 total_cpu += cpu
                 total_mem += mem                      
             data.append([stats['metadata']['name'], math.ceil(cpu) , round(mem, 2), stats['metadata']['namespace']])
-            
-        headers = ["POD_NAME" , "CPU_USED", "MEMORY_USED(MB)", "NAMSPACE"]
+
         data = Output.sort_data(data, sort)
-        data.append(['\nTotal:', '\n' + str(math.ceil(total_cpu)) + 'm', '\n' + str(round(total_mem / 1000 , 2)) + ' GB', ''])        
-        Output.print_table(data, headers, True)
+        data.append(['\nTotal:', '\n' + str(math.ceil(total_cpu)) + 'm', '\n' + str(round(total_mem / 1000 , 2)) + ' GB', ''])
+        headers = ["POD_NAME" , "CPU_USED", "MEMORY_USED(MB)", "NAMSPACE"]         
+        Output.print(data, headers, output)
       
     def get_resource_usage_by_ns(output, sort):
         data, total_cpu, total_mem = [], 0, 0
@@ -101,14 +101,15 @@ class K8sToppur():
                         ns_cpu += pod_cpu
             total_cpu += ns_cpu
             total_mem += ns_mem  
-            data.append([item.metadata.name, math.ceil(ns_cpu), round(ns_mem, 2)])
+            data.append([item.metadata.name, str(math.ceil(ns_cpu)), str(round(ns_mem / 1000, 2))])
         
         if 'mem' in sort: data.sort(key=lambda x: x[2])
         if 'cpu' in sort: data.sort(key=lambda x: x[1])
         data = Output.sort_data(data, sort)
         data.append(['Total:', str(math.ceil(total_cpu)) + 'm', str(round(total_mem / 1000, 2)) + ' GB'])
-        headers = ["NAMESPACE" , "CPU_USED", "MEMORY_USED(MB)"]
-        Output.print_table(data, headers, True)
+        data = Output.bar(data)
+        headers = ["NAMESPACE" , "CPU_USED", "%AGE_CLUSTER_TOTAL_CPU", "MEMORY_USED(GB)", "%AGE_CLUSTER_TOTAL_MEM"]
+        Output.print(data, headers, output)
 
     def get_namespaced_resource_usage(output, ns, sort):
         data, total_cpu, total_mem = [], 0, 0
@@ -140,7 +141,7 @@ def main():
     options = GetOpts.get_opts()
     if options[0]:
         usage()
-
+    # options = [help, pods, ns, output, sort, filter]
     if 'namespace' in options[5] and not options[2]:
         K8sToppur.get_resource_usage_by_ns(options[3], options[4])
     elif 'pod' in options[5] and not options[2]:
@@ -149,6 +150,7 @@ def main():
         K8sToppur.get_namespaced_resource_usage(options[3], options[2], options[4])
     else:  
         K8sToppur.get_nodes(options[3], options[4])
+        K8sToppur.get_resource_usage_by_ns(options[3], options[4])
     Output.time_taken(start_time)
 
 if __name__ == "__main__":
