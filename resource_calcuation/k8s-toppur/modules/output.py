@@ -1,5 +1,4 @@
-from columnar import columnar
-from click import style
+from tabulate import tabulate
 from packaging import version
 import os, re, time, requests, json, csv
 
@@ -12,6 +11,7 @@ class Output:
     RESET = '\033[0m'
     BOLD = '\033[1;30m'
     MARKER = u"\u2309\u169B\u22B8"
+    TOTAL = BOLD + 'Total: ' + RESET
     # color codes https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html
     # u'\u2717' means values is None or not defined
     # u'\u2714' means value is defined
@@ -38,27 +38,22 @@ class Output:
             data.sort(key=lambda x: x[0])
         return data
 
-
-    # # prints table from lists of lists: data
-    # def print_table(data, headers, verbose):
-    #     if verbose and len(data) != 0:
-    #         table = columnar(data, headers, no_borders=True, row_sep='-')
-    #         print (table)
-    #     else:
-    #         return
-
     # prints analysis in bar format with %age, count and message
     def bar(data):
-        total_cpu = re.sub('[^0-9]','', data[-1][1])
-        total_mem = re.sub('[^0-9]','', data[-1][2])
         i = 0
 
         for line in data:
             show_bar_cpu, show_bar_mem = [], []
-            cpu_used = re.sub('[^0-9]','', line[1])
-            mem_used = re.sub('[^0-9]','', line[2])
-            cpu_percentage = round((100 * int(cpu_used) / int(total_cpu)), 2)
-            mem_percentage = round((100 * int(mem_used) / int(total_mem)), 2)
+            if not 'm' in line[2]:
+                cpu_used = int(re.sub('[^0-9]','', line[1])) / 1000
+            else:
+                cpu_used = int(re.sub('[^0-9]','', line[1]))
+            total_cpu = int(re.sub('[^0-9]','', line[2]))
+
+            mem_used = float(line[3])
+            total_mem = float(line[-1])
+            cpu_percentage = round((100 * cpu_used / total_cpu), 2)
+            mem_percentage = round((100 * mem_used / total_mem), 2)
 
             for i in range(17):
                 if int(i) < cpu_percentage / 6:
@@ -70,22 +65,17 @@ class Output:
                 else:
                     show_bar_mem.append(u'\u2591')                    
             if 'Total:' not in line[0]:
-                line.insert(2, "{} {} {} {}%".format(Output.D_BLUE, "".join(show_bar_cpu), Output.RESET, round(cpu_percentage, 1)))
+                line.insert(3, "{} {} {} {}%".format(Output.GREEN, "".join(show_bar_cpu), Output.RESET, round(cpu_percentage, 1)))
                 line.append("{} {} {} {}%".format(Output.CYAN, "".join(show_bar_mem), Output.RESET, round(mem_percentage, 1)))
             else:
                 line.insert(2, '')
                 line.append('')
-            
         return data
 
     # prints table from lists of lists: data
     def print_table(data, headers):
         try:
-            if len(data) != 0:
-                headers = headers[:6]
-                table = columnar(data, headers, no_borders=True, row_sep='-')
-                print (table)
-                #print("Total: {}".format(len(data)))
+            print(tabulate(data, showindex=False, headers=headers, tablefmt='plain'))
         except:
             print("Empty/Incorrect data received!")
 
@@ -93,13 +83,16 @@ class Output:
     def print_tree(data, headers):
         h = sorted(headers[1:], key=len)    # sorting to find longest element in headers for :
         for d in data:
+            if not d: continue
             heading = headers[0] + ": "
             Output.separator(Output.YELLOW, '.' , '')
-            print(Output.BOLD + heading + d[0] + Output.RESET)
+            if not 'Total' in d[0]:
+                print(Output.BOLD + heading + d[0] + Output.RESET)
+            else:
+                print(Output.BOLD + d[0] + Output.RESET)                
 
             # printing the tree
             for i in range(len(headers)):
-                
                 try:
                     # https://www.compart.com/en/unicode/mirrored
                     # printing 2nd level tree in if condition
@@ -178,5 +171,4 @@ class Output:
         elif 'csv' in format:
             Output.csv_out(data, headers)
         else:
-            Output.print_table(data, headers)        
-        
+            Output.print_table(data, headers)

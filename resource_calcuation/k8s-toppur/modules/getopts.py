@@ -2,9 +2,11 @@ import getopt, sys
 
 class GetOpts:
     def get_opts():
-        help, pods, ns, output, sort, filter ='', '', '', '', '', ''
+        help, pods, ns, output, sort, filter = [''] * 6
         try:
-            opts, args = getopt.getopt(sys.argv[1:], "hp:n:o:s:f:", ["help", "pods=", "namespace=", "output=", "sort=", "filter="])
+            opts, args = getopt.getopt(sys.argv[1:], "hp:n:o:s:f:", \
+                                        ["help", "pods=", "namespace=", \
+                                        "output=", "sort=", "filter="])
         except getopt.GetoptError as err:
             print("[ERROR] {}. ".format(err) + \
             "Please run script with -h flag to see valid options.")
