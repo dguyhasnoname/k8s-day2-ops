@@ -7,9 +7,8 @@ This tool can be used to calculate run time resources usage in a k8s cluster. It
 Please install below python modules:
 1. getopt
 2. kubernetes python client
-3. cloumnar
-4. click
-5. packaging
+3. tabulate
+4. packaging
 
 ### usage
 
@@ -28,9 +27,10 @@ Before running script export KUBECONFIG file as env:
 optional arguments:
   -h, --help       show this help message and exit
   -s, --sort       sort by cpu/memory. Default sorting is by name.
-  -n, --namespace  check resources in specific namespace.
-  -f, --filter     filter resource usage by namespace|pods
-  -o, --output     for output in json format pass json. Default is plain text
+  -n, --namespace  check resources in specific namespace. Comma separated multiple namespace supported
+  -f, --filter     filter resource usage by pods/pod_string in overall cluster.Comma separated multiple pods supported
+  -o, --output     output formats csv|json|tree. Default is text on stdout.
+  -p, --pods       filter resource usage by pod name in overall cluster.Comma separated multiple pods supported
 
 ```
 
