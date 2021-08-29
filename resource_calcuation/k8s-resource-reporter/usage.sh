@@ -18,8 +18,6 @@ usage () {
 
 time_stamp=$(date +%Y%m%d_%H%M%S)
 default_file_name="report_$time_stamp.csv"
-dir='reports'
-[[ ! -e $dir ]] && mkdir -p $dir
 
 pod_resource_allocation () {
     if [[ ! -z "$NAMESPACE" ]];
@@ -54,7 +52,7 @@ pod_resource_allocation () {
 
         done <<< "$pod_resource_allocation"
     else
-        echo "Failed fetching resource allocations for pods in namespace $NAMESPACE."
+        printf "${RED}Failed fetching resource allocations for pods in namespace $NAMESPACE.${END}"
     fi
 }
 
@@ -116,13 +114,20 @@ pod_usage_details () {
             echo "$var" >> "$pod_usage_out_file_name"
         done <<< "$pod_usage_details"
     else
-        echo "${END}Failed fetching resource usage for pods in namespace $NAMESPACE.${END}"
+        pritnf "${END}Failed fetching resource usage for pods in namespace $NAMESPACE.${END}"
     fi
     unset $NAMESPACE
 }
 
 main () {
     echo "Found KUBECONFIG at $KUBECONFIG"
+    if [[ -z "$CUST_DIR" ]];
+    then
+        dir='reports'
+    else
+        dir="reports/$CUST_DIR"
+    fi
+    [[ ! -e $dir ]] && mkdir -p $dir
     pod_resource_allocation
     node_usage_details
     pod_usage_details
@@ -130,12 +135,14 @@ main () {
 
 OPTIND=1
 
-while getopts "h?n:f:" opt; do
+while getopts "h?n:d:" opt; do
     case "$opt" in
     h|\?)
         usage
         ;;
     n)  NAMESPACE=${OPTARG}
+        ;;
+    d) CUST_DIR=${OPTARG}
         ;;
     esac
 done
