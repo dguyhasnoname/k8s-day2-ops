@@ -23,33 +23,49 @@ pod_resource_allocation () {
     if [[ ! -z "$NAMESPACE" ]];
     then
         echo "Fetching resource allocation for namespace $NAMESPACE"
-        pod_resource_allocation="$(kubectl get po -n "$NAMESPACE" -o json | jq -rj '.items[] | .metadata.name, "|", .metadata.namespace,  "|", .spec.containers[].resources.limits.cpu, "|", .spec.containers[].resources.limits.memory, "|", .spec.containers[].resources.requests.cpu, "|", .spec.containers[].resources.requests.memory, "\n"')"
+        pod_resource_allocation="$(kubectl get po -n "$NAMESPACE" -o=jsonpath='{range .items[*]}{"\n"}{"pod_name:"}{.metadata.name}{" | pod_ns:"}{.metadata.namespace}{" | cont_name:"}{range .spec.containers[*]}{.name}{" | cont_lim_cpu:"}{..resources.limits.cpu}{" | cont_lim_mem:"}{.resources.limits.memory}{" | cont_req_cpu:"}{.resources.requests.cpu}{" | cont_req_mem:"}{.resources.requests.memory}{"\n"}{end}{end}')"
     else
         echo "Fetching resource allocation for all namespaces"
-        pod_resource_allocation="$(kubectl get po -A -o json | jq -rj '.items[] | .metadata.name, "|", .metadata.namespace,  "|", .spec.containers[].resources.limits.cpu, "|", .spec.containers[].resources.limits.memory, "|", .spec.containers[].resources.requests.cpu, "|", .spec.containers[].resources.requests.memory, "\n"')"
+        pod_resource_allocation="$(kubectl get pods -A -o=jsonpath='{range .items[*]}{"\n"}{"pod_name:"}{.metadata.name}{" | pod_ns:"}{.metadata.namespace}{" | cont_name:"}{range .spec.containers[*]}{.name}{" | cont_lim_cpu:"}{..resources.limits.cpu}{" | cont_lim_mem:"}{.resources.limits.memory}{" | cont_req_cpu:"}{.resources.requests.cpu}{" | cont_req_mem:"}{.resources.requests.memory}{"\n"}{end}{end}')"
     fi
-    # printf "%-70s %-35s %-10s %-10s %-10s %-10s\n", 'POD_NAME' 'NAMESPACE' 'CPU_LIMITS' 'MEM_LIMITS' 'CPU_REQUESTS' 'MEM_REQUESTS'  
-    # echo "$pod_resource_allocation" | awk -F '|' '{printf "%-70s %-35s %-10s %-10s %-10s %-10s\n", $1, $2, $3, $4, $5, $6}' 
 
+    #echo "$pod_resource_allocation"
     if [[ ! -z "$pod_resource_allocation" ]];
     then
         pod_resource_allocation_out_file_name="$dir/pod_resource_allocation_$default_file_name"
         echo "Fetched resource allocations for pods in namespace $NAMESPACE and storing in file $pod_resource_allocation_out_file_name"
-        header=$(paste -d, <(echo "POD_NAME") <(echo "NAMESPACE") <(echo "CPU_LIMITS") \
+        header=$(paste -d, <(echo "POD_NAME") <(echo "NAMESPACE") <(echo "CONTAINER_NAME") <(echo "CPU_LIMITS") \
                 <(echo "MEM_LIMITS") <(echo "CPU_REQUESTS") <(echo "MEM_REQUESTS"))
         echo "$header" >> "$pod_resource_allocation_out_file_name"    
         while read -r line;
         do
-            pod_name=$(echo "$line" | awk -F '|' '{print $1}')
-            namespace=$(echo "$line" | awk -F '|' '{print $2}')
-            cpu_limits=$(echo "$line" | awk -F '|' '{print $3}')
-            mem_limits=$(echo "$line" | awk -F '|' '{print $4}')
-            cpu_requests=$(echo "$line" | awk -F '|' '{print $5}')
-            mem_requests=$(echo "$line" | awk -F '|' '{print $6}')
-            var="$(paste -d, <(echo "$pod_name") <(echo "$namespace") \
+            if echo "$line" | grep 'pod_name' > /dev/null;
+            then
+                pod_name=$(echo "$line" | awk -F '|' '{print $1}' | awk -F ':' '{print $2}')
+                namespace=$(echo "$line" | awk -F '|' '{print $2}' | awk -F ':' '{print $2}')
+                container_name=$(echo "$line" | awk -F '|' '{print $3}' | awk -F ':' '{print $2}')
+                cpu_limits=$(echo "$line" | awk -F '|' '{print $4}' | awk -F ':' '{print $2}')
+                mem_limits=$(echo "$line" | awk -F '|' '{print $5}' | awk -F ':' '{print $2}')
+                cpu_requests=$(echo "$line" | awk -F '|' '{print $6}' | awk -F ':' '{print $2}')
+                mem_requests=$(echo "$line" | awk -F '|' '{print $7}' | awk -F ':' '{print $2}')                                
+            else
+                pod_name="$prev_pod_name"
+                namespace="$prev_namespace"
+                container_name=$(echo "$line" | awk -F '|' '{print $1}')
+                cpu_limits=$(echo "$line" | awk -F '|' '{print $2}' | awk -F ':' '{print $2}')
+                mem_limits=$(echo "$line" | awk -F '|' '{print $3}' | awk -F ':' '{print $2}')
+                cpu_requests=$(echo "$line" | awk -F '|' '{print $4}' | awk -F ':' '{print $2}')
+                mem_requests=$(echo "$line" | awk -F '|' '{print $5}' | awk -F ':' '{print $2}')
+            fi
+            
+            var="$(paste -d, <(echo "$pod_name") <(echo "$namespace") <(echo "$container_name")\
             <(echo "$cpu_limits") <(echo "$mem_limits") <(echo "$cpu_requests") <(echo "$mem_requests"))"
-            echo "$var" >> "$pod_resource_allocation_out_file_name"
-
+            if [[ ! -z "$container_name" ]];
+            then
+                echo "$var" >> "$pod_resource_allocation_out_file_name"
+            fi
+            prev_pod_name="$pod_name"
+            prev_namespace="$namespace"
         done <<< "$pod_resource_allocation"
     else
         printf "${RED}Failed fetching resource allocations for pods in namespace $NAMESPACE.${END}"
@@ -114,7 +130,7 @@ pod_usage_details () {
             echo "$var" >> "$pod_usage_out_file_name"
         done <<< "$pod_usage_details"
     else
-        pritnf "${END}Failed fetching resource usage for pods in namespace $NAMESPACE.${END}"
+        printf "${END}Failed fetching resource usage for pods in namespace $NAMESPACE.${END}"
     fi
     unset $NAMESPACE
 }
@@ -149,8 +165,7 @@ done
 shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
 
-[[ -z "$KUBECONFIG" ]] && echo "${RED}[ERROR] Missing mandatory requirements${END}" && usage 
-[ -x jq ] && echo -e "${RED}Command 'jq' not found. Please install it.${END}" >&2 && exit 1
+[[ -z "$KUBECONFIG" ]] && echo "${RED}[ERROR] Missing mandatory requirements${END}" && usage
 
 main
 
