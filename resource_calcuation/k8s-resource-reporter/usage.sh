@@ -19,6 +19,19 @@ usage () {
 time_stamp=$(date +%Y%m%d_%H%M%S)
 default_file_name="report_$time_stamp.csv"
 
+# converts cpu/mem to similar units
+covert_unit_val() {
+    val=$1
+    val_num=$(echo $val | sed 's/[^0-9]*//g')
+    [[ "$2" == "lim_cpu" ]] && cpu_limits=$(echo $val_num/1000|bc -l)
+    [[ "$2" == "req_cpu" ]] && cpu_requests=$(echo $val_num/1000|bc -l)
+    [[ "$2" == "lim_mem_gi" ]] && mem_limits="$(($val_num*1000))Mi"
+    [[ "$2" == "req_mem_gi" ]] && mem_requests="$(($val_num*1000))Mi"
+    [[ "$2" == "lim_mem_ki" ]] && mem_limits="$(echo $val_num/1000|bc -l)Mi"
+    [[ "$2" == "req_mem_ki" ]] && mem_requests="$(echo $val_num/1000|bc -l)Mi"                
+}
+
+# calculates pod resource allocation
 pod_resource_allocation () {
     if [[ ! -z "$NAMESPACE" ]];
     then
@@ -29,7 +42,6 @@ pod_resource_allocation () {
         pod_resource_allocation="$(kubectl get pods -A -o=jsonpath='{range .items[*]}{"\n"}{"pod_name:"}{.metadata.name}{" | pod_ns:"}{.metadata.namespace}{" | cont_name:"}{range .spec.containers[*]}{.name}{" | cont_lim_cpu:"}{..resources.limits.cpu}{" | cont_lim_mem:"}{.resources.limits.memory}{" | cont_req_cpu:"}{.resources.requests.cpu}{" | cont_req_mem:"}{.resources.requests.memory}{"\n"}{end}{end}')"
     fi
 
-    #echo "$pod_resource_allocation"
     if [[ ! -z "$pod_resource_allocation" ]];
     then
         pod_resource_allocation_out_file_name="$dir/pod_resource_allocation_$default_file_name"
@@ -57,13 +69,30 @@ pod_resource_allocation () {
                 cpu_requests=$(echo "$line" | awk -F '|' '{print $4}' | awk -F ':' '{print $2}')
                 mem_requests=$(echo "$line" | awk -F '|' '{print $5}' | awk -F ':' '{print $2}')
             fi
-            
+
+            # converting milliseconds cpu 
+            [[ "$cpu_limits" =~ "m" ]] && covert_unit_val $cpu_limits 'lim_cpu'
+            [[ "$cpu_requests" =~ "m" ]] && covert_unit_val $cpu_requests 'req_cpu' 
+
+            # converting mem from Gb to Mb
+            [[ "$mem_limits" =~ "G" ]] && covert_unit_val "$mem_limits" 'lim_mem_gi'
+            [[ "$mem_requests" =~ "G" ]] && covert_unit_val "$mem_requests" 'req_mem_gi'
+
+            # converting mem Kb to Mb
+            [[ "$mem_limits" =~ "K" ]] && covert_unit_val "$mem_limits" 'lim_mem_gi'
+            [[ "$mem_requests" =~ "K" ]] && covert_unit_val "$mem_requests" 'req_mem_gi'                             
+
+            # creating values line to be pasted in csv
             var="$(paste -d, <(echo "$pod_name") <(echo "$namespace") <(echo "$container_name")\
             <(echo "$cpu_limits") <(echo "$mem_limits") <(echo "$cpu_requests") <(echo "$mem_requests"))"
+
+            # appending values in csv file
             if [[ ! -z "$container_name" ]];
             then
                 echo "$var" >> "$pod_resource_allocation_out_file_name"
             fi
+
+            # retaining pod names for pods having multiple containers
             prev_pod_name="$pod_name"
             prev_namespace="$namespace"
         done <<< "$pod_resource_allocation"
@@ -72,6 +101,7 @@ pod_resource_allocation () {
     fi
 }
 
+# fetching node resource usage details
 node_usage_details () {
     echo "Fetching resource usage for nodes"
     node_usage_details="$(kubectl top nodes)"
@@ -86,7 +116,9 @@ node_usage_details () {
             cpu_usage=$(echo "$line" | awk '{print $2}')
             cpu_percentage_usage=$(echo "$line" | awk '{print $3}')
             mem_usage=$(echo "$line" | awk '{print $4}')
-            mem_percentage_usage=$(echo "$line" | awk '{print $5}') 
+            mem_percentage_usage=$(echo "$line" | awk '{print $5}')
+
+            # preparing data to write in a csv file 
             var="$(paste -d, <(echo "$node_name") <(echo "$cpu_usage") \
                     <(echo "$cpu_percentage_usage") <(echo "$mem_usage") \
                     <(echo "$mem_percentage_usage"))"
@@ -97,7 +129,7 @@ node_usage_details () {
     fi
 }
 
-
+# getting pod metrics detail
 pod_usage_details () {
     if [[ ! -z "$NAMESPACE" ]];
     then
@@ -127,6 +159,8 @@ pod_usage_details () {
                 mem_usage=$(echo "$line" | awk '{print $4}')
                 var="$(paste -d, <(echo "$namespace") <(echo "$pod_name") <(echo "$cpu_usage") <(echo "$mem_usage"))"
             fi
+
+            # writing data to the csv out file
             echo "$var" >> "$pod_usage_out_file_name"
         done <<< "$pod_usage_details"
     else
@@ -137,20 +171,26 @@ pod_usage_details () {
 
 main () {
     echo "Found KUBECONFIG at $KUBECONFIG"
+
+    # settting the value to report directory
     if [[ -z "$CUST_DIR" ]];
     then
         dir='reports'
     else
         dir="reports/$CUST_DIR"
     fi
+
+    # creating reports dir if not found
     [[ ! -e $dir ]] && mkdir -p $dir
+
+    # calling dedicated functions for pod and nodes
     pod_resource_allocation
     node_usage_details
     pod_usage_details
 }
 
+# getting optional arguments
 OPTIND=1
-
 while getopts "h?n:d:" opt; do
     case "$opt" in
     h|\?)
