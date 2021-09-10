@@ -94,7 +94,7 @@ pod_resource_allocation () {
 
             # converting byte to Mi
             [[ "$mem_limits" =~ [^A-Za-z] ]] && covert_unit_val "$mem_limits" 'lim_mem_byte'
-            [[ "$mem_requests" =~ =~ [^A-Za-z] ]] && covert_unit_val "$mem_requests" 'req_mem_byte'
+            [[ "$mem_requests" =~ [^A-Za-z] ]] && covert_unit_val "$mem_requests" 'req_mem_byte'
 
             # creating values line to be pasted in csv
             var="$(paste -d, <(echo "$pod_name") <(echo "$namespace") <(echo "$container_name")\
