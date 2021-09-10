@@ -30,7 +30,9 @@ covert_unit_val() {
     [[ "$2" == "lim_mem_gi" ]] && mem_limits="$(($val_num*1000))Mi"
     [[ "$2" == "req_mem_gi" ]] && mem_requests="$(($val_num*1000))Mi"
     [[ "$2" == "lim_mem_ki" ]] && mem_limits="$(echo $val_num/1000|bc -l)Mi"
-    [[ "$2" == "req_mem_ki" ]] && mem_requests="$(echo $val_num/1000|bc -l)Mi"                
+    [[ "$2" == "req_mem_ki" ]] && mem_requests="$(echo $val_num/1000|bc -l)Mi"
+    [[ "$2" == "lim_mem_M" ]] && mem_limits="$(echo $val_num)Mi"
+    [[ "$2" == "req_mem_M" ]] && mem_requests="$(echo $val_num)Mi"
 }
 
 # calculates pod resource allocation
@@ -81,8 +83,12 @@ pod_resource_allocation () {
             [[ "$mem_requests" =~ "G" ]] && covert_unit_val "$mem_requests" 'req_mem_gi'
 
             # converting mem Kb to Mb
-            [[ "$mem_limits" =~ "K" ]] && covert_unit_val "$mem_limits" 'lim_mem_gi'
-            [[ "$mem_requests" =~ "K" ]] && covert_unit_val "$mem_requests" 'req_mem_gi'                             
+            [[ "$mem_limits" =~ "K" ]] && covert_unit_val "$mem_limits" 'lim_mem_ki'
+            [[ "$mem_requests" =~ "K" ]] && covert_unit_val "$mem_requests" 'req_mem_ki'
+
+            # converting M to Mi
+            [[ "$mem_limits" =~ "M" ]] && covert_unit_val "$mem_limits" 'lim_mem_M'
+            [[ "$mem_requests" =~ "M" ]] && covert_unit_val "$mem_requests" 'req_mem_M'
 
             # creating values line to be pasted in csv
             var="$(paste -d, <(echo "$pod_name") <(echo "$namespace") <(echo "$container_name")\
