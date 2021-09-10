@@ -25,6 +25,8 @@ covert_unit_val() {
     val_num=$(echo $val | sed 's/[^0-9]*//g')
     [[ "$2" == "lim_cpu" ]] && cpu_limits=$(echo $val_num/1000|bc -l)
     [[ "$2" == "req_cpu" ]] && cpu_requests=$(echo $val_num/1000|bc -l)
+    [[ "$2" == "pod_cpu" ]] && cpu_usage=$(echo $val_num/1000|bc -l)
+    [[ "$2" == "node_cpu" ]] && cpu_usage=$(echo $val_num/1000|bc -l)
     [[ "$2" == "lim_mem_gi" ]] && mem_limits="$(($val_num*1000))Mi"
     [[ "$2" == "req_mem_gi" ]] && mem_requests="$(($val_num*1000))Mi"
     [[ "$2" == "lim_mem_ki" ]] && mem_limits="$(echo $val_num/1000|bc -l)Mi"
@@ -118,6 +120,8 @@ node_usage_details () {
             mem_usage=$(echo "$line" | awk '{print $4}')
             mem_percentage_usage=$(echo "$line" | awk '{print $5}')
 
+            [[ "$cpu_usage" =~ "m" ]] && covert_unit_val $cpu_usage 'node_cpu'
+
             # preparing data to write in a csv file 
             var="$(paste -d, <(echo "$node_name") <(echo "$cpu_usage") \
                     <(echo "$cpu_percentage_usage") <(echo "$mem_usage") \
@@ -144,6 +148,7 @@ pod_usage_details () {
     then
         pod_usage_out_file_name="$dir/pod_resource_usage_$default_file_name"
         echo "Fetched resource usage for pods in $NAMESPACE namespace and storing in file $pod_usage_out_file_name"
+        total_pod_cpu_usage=0
         while read -r line;
         do
             if [[ ! -z "$NAMESPACE" ]];
@@ -151,18 +156,22 @@ pod_usage_details () {
                 pod_name=$(echo "$line" | awk '{print $1}')
                 cpu_usage=$(echo "$line" | awk '{print $2}')            
                 mem_usage=$(echo "$line" | awk '{print $3}')
+                [[ "$cpu_usage" =~ "m" ]] && covert_unit_val $cpu_usage 'pod_cpu'
                 var="$(paste -d, <(echo "$pod_name") <(echo "$cpu_usage") <(echo "$mem_usage"))"
             else
                 namespace=$(echo "$line" | awk '{print $1}')
                 pod_name=$(echo "$line" | awk '{print $2}')
                 cpu_usage=$(echo "$line" | awk '{print $3}')
                 mem_usage=$(echo "$line" | awk '{print $4}')
+                [[ "$cpu_usage" =~ "m" ]] && covert_unit_val $cpu_usage 'pod_cpu'
                 var="$(paste -d, <(echo "$namespace") <(echo "$pod_name") <(echo "$cpu_usage") <(echo "$mem_usage"))"
             fi
-
+            
             # writing data to the csv out file
             echo "$var" >> "$pod_usage_out_file_name"
         done <<< "$pod_usage_details"
+        echo $total_pod_cpu_usage
+
     else
         printf "${END}Failed fetching resource usage for pods in namespace $NAMESPACE.${END}"
     fi
