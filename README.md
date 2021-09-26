@@ -30,6 +30,8 @@ This repository contain scripts for Kubernetes day 2 operations
         - a quick tool to perform health-check of control plane workloads in a cluster post upgrade
 
 
+<a href="https://buymeacoffee.com/dguyhasnoname" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+
 ## Sample run
 
 ### k8s-toppur
@@ -199,4 +201,4 @@ v1.15.10 >>> v1.16.x >>> v1.17.x >>> v1.18.x
 Total time taken: 101s
 
 ```
-[buy me a coffee](https://www.buymeacoffee.com/dguyhasnoname)
+
