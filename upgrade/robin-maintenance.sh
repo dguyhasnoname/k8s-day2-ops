@@ -85,7 +85,7 @@ upgrade_node () {
         echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Node found. Sending node ${NODE_NAME} in maintenance"
         
         # uncomment below line to set in maintenance mode
-        #robin host set-maintenance ${NODE_NAME}"
+        #robin host set-maintenance ${NODE_NAME}
         if [[ "$?" -eq 0 ]];
         then
             echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Finding pods running on node ${NODE_NAME}"
@@ -172,3 +172,4 @@ END_TIME=$(date +%s)
 EXECUTION_TIME=$((END_TIME-START_TIME))
 separator
 echo "Total time taken:" "$EXECUTION_TIME"s
+
