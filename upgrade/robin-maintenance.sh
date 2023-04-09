@@ -2,8 +2,8 @@
 #######################################################################################
 # Description: This script verfies any workload health during robin node maintenance  #
 # Author:      Mukund                                                                 #
-# Date:        8th April 2023                                                         #
-# Version:     1.0.0                                                                  #
+# Date:        9th April 2023                                                         #
+# Version:     1.0.1                                                                  #
 #######################################################################################
 
 
@@ -18,15 +18,12 @@ separator () {
     printf '\n'
 }
 
-indent () {
-    x="$1"
-    awk '{printf "%"'"$x"'"s%s\n", "", $0}'
-}
-
 usage () {
     [[ -z "$KUBECONFIG" ]] && echo "[WARNING]: Export KUBECONFIG before running the script."
     printf "Usage: \n\n"
-    printf "./robin-maintenance.sh -n <node_name> -k /tmp/kubeconfig \n\n"
+    printf "./robin-maintenance.sh -n <node_name> -k /tmp/kubeconfig"
+    echo
+    echo
     echo "Flags:"
     echo "  -h                  help"
     echo "  -n   Mandatory      Robin node to be set for maintenance"
@@ -41,14 +38,14 @@ pod_scheduling_status() {
     pod_data="$3"
     echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Checking pod details for pod ${pod_name} in namespace ${pod_ns}"
     pod_owner_kind="$(echo "$pod_data" | jq -r '.metadata.ownerReferences[0].kind')"
-    #pod_owner_kind="$(kubectl get pod ${pod_name} -n ${pod_ns} -o jsonpath='{.metadata.ownerReferences[0].kind}')"
+
     if [[ ${pod_owner_kind} == "ReplicaSet" ]];
     then
         pod_rs_name="$(echo "$pod_data" | jq -r '.metadata.ownerReferences[0].name')"
         pod_deploy_name="$(kubectl get rs ${pod_rs_name} -n ${pod_ns} -o jsonpath='{.metadata.ownerReferences[0].name}')"
         echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Pod ${pod_name} in namespace ${pod_ns} is owned by replicaset ${pod_rs_name} and deployment ${pod_deploy_name}"
         echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Waiting for Deployment ${pod_deploy_name} in namespace ${pod_ns} owned by replicaset ${pod_rs_name} to get healthy"
-        kubectl wait --for condition=Available=True  deploy ${pod_deploy_name} -n ${pod_ns}
+        kubectl wait --for=condition=Available=True  deploy ${pod_deploy_name} -n ${pod_ns}
         if [[ "$?" -eq 0 ]];
         then
             echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Deployment ${pod_deploy_name} in namespace ${pod_ns} owned by replicaset ${pod_rs_name} is HEALTHY"
@@ -58,7 +55,7 @@ pod_scheduling_status() {
         pod_sts_name="$(echo "$pod_data" | jq -r '.metadata.ownerReferences[0].name')"
         echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Pod ${pod_name} in namespace ${pod_ns} is ownded by statefulset ${pod_sts_name}"
         echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Waiting for statefulset ${pod_sts_name} in namespace ${pod_ns} to get healthy"
-        kubectl wait --for condition=Available=True  sts ${pod_sts_name} -n ${pod_ns} 
+        kubectl wait --for=condition=Available=True  sts ${pod_sts_name} -n ${pod_ns} 
         if [[ "$?" -eq 0 ]];
         then
             echo -e "${GREEN}[INFO]   ${END} `date "+%Y-%m-%d %H:%M:%S%p"` Statefulset ${pod_sts_name} in namespace ${pod_ns} is HEALTHY"
